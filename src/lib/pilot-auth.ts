@@ -1,4 +1,14 @@
 export const PILOT_SESSION_COOKIE = "teiki_chosa_pilot_session";
+const PUBLIC_PILOT_PATHS = new Set([
+  "/login",
+  "/login/",
+  "/api/pilot-login",
+  "/api/pilot-login/",
+]);
+
+export function isPublicPilotPath(pathname: string): boolean {
+  return PUBLIC_PILOT_PATHS.has(pathname);
+}
 
 export function readPilotPassword(
   env: Record<string, string | undefined>,

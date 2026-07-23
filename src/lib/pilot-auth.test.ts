@@ -1,11 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
   createPilotSessionToken,
+  isPublicPilotPath,
   readPilotPassword,
   safeEqual,
 } from "./pilot-auth";
 
 describe("pilot auth", () => {
+  it("keeps login routes public with or without a trailing slash", () => {
+    expect(isPublicPilotPath("/login")).toBe(true);
+    expect(isPublicPilotPath("/login/")).toBe(true);
+    expect(isPublicPilotPath("/api/pilot-login")).toBe(true);
+    expect(isPublicPilotPath("/api/pilot-login/")).toBe(true);
+    expect(isPublicPilotPath("/")).toBe(false);
+    expect(isPublicPilotPath("/api/survey-records/")).toBe(false);
+  });
+
   it("requires only a password", () => {
     expect(readPilotPassword({})).toBeNull();
     expect(readPilotPassword({ PILOT_PASSWORD: "wakayama" })).toBe("wakayama");
