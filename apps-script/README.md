@@ -24,14 +24,11 @@
 4. アクセスできるユーザーは `全員`。
 5. デプロイ後に表示される `/exec` で終わるURLを控える。
 
-## 4. GitHub Actionsへ登録する
+## 4. 入力アプリとの関係
 
-リポジトリの Settings → Secrets and variables → Actions → Variables に次を追加する。
-
-- `NEXT_PUBLIC_GAS_WEB_APP_URL`: 手順3のWebアプリURL
-- `NEXT_PUBLIC_GAS_API_TOKEN`: 手順2のAPIトークン
-
-GitHub Pagesのワークフローが環境変数を読み込むようにした後、再デプロイする。
+オンライン試用版の入力アプリは、ブラウザからこのWebアプリを直接呼び出しません。
+Google認証情報を保持するNext.jsサーバーを経由して調査原票へ保存します。このWebアプリは
+既存連携や保守用として残し、URLやAPIトークンを`NEXT_PUBLIC_*`環境変数へ設定しないでください。
 
 ## 登録仕様
 

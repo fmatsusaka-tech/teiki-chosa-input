@@ -1,33 +1,67 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { buildSurveyRecordFromOcr } from "../../../domain/build-survey-record-from-ocr";
+import { surveyRecordSchema } from "../../../domain/survey-record";
 import { surveyParseCandidateSchema } from "../../../services/ocr-parser";
 import {
   GoogleSheetsRestClient, GoogleSheetsSurveyRecordPersistence, saveSurveyRecords,
   SurveyRecordPersistenceError,
 } from "../../../services/survey-record-persistence";
 
-const requestSchema = z.object({
+const ocrRequestSchema = z.object({
   candidates: z.array(surveyParseCandidateSchema).min(1),
   warningsConfirmed: z.literal(true),
   sourceKind: z.enum(["photo", "screenshot"]).default("photo"),
 });
 
+const confirmedRecordsRequestSchema = z.object({
+  records: z.array(surveyRecordSchema).min(1),
+  sourceText: z.string().max(100_000).default(""),
+  operator: z.string().trim().max(200).default(""),
+});
+
 export async function POST(request: Request) {
   try {
-    const body = requestSchema.parse(await request.json());
+    const input = await request.json();
     const now = new Date().toISOString();
-    const records = body.candidates.map((candidate) => buildSurveyRecordFromOcr(candidate, {
-      registeredAt: now, source: body.sourceKind,
-    }));
-    const sourceText = body.candidates.map((candidate) => candidate.sourceText).filter(Boolean).join("\n---\n");
+    const ocrRequest = ocrRequestSchema.safeParse(input);
+    const confirmedRequest = confirmedRecordsRequestSchema.safeParse(input);
+    if (!ocrRequest.success && !confirmedRequest.success) {
+      return NextResponse.json({ error: "保存前の確認内容が不正です。" }, { status: 400 });
+    }
+    let records;
+    let sourceText;
+    let operator = "";
+    let origin;
+    if (ocrRequest.success) {
+      records = ocrRequest.data.candidates.map((candidate) => buildSurveyRecordFromOcr(candidate, {
+          registeredAt: now, source: ocrRequest.data.sourceKind,
+        }));
+      sourceText = ocrRequest.data.candidates
+        .map((candidate) => candidate.sourceText).filter(Boolean).join("\n---\n");
+      origin = "OCR確認画面";
+    } else if (confirmedRequest.success) {
+      records = confirmedRequest.data.records;
+      sourceText = confirmedRequest.data.sourceText;
+      operator = confirmedRequest.data.operator;
+      origin = "入力画面";
+    } else {
+      return NextResponse.json({ error: "保存前の確認内容が不正です。" }, { status: 400 });
+    }
     const persistence = new GoogleSheetsSurveyRecordPersistence(GoogleSheetsRestClient.fromEnvironment(), {
       spreadsheetId: process.env.GOOGLE_SHEETS_SPREADSHEET_ID,
       sheetName: "調査原票",
-      origin: "OCR確認画面",
+      operator,
+      origin,
       sourceText,
     });
-    return NextResponse.json(await saveSurveyRecords(persistence, records));
+    const saved = await saveSurveyRecords(persistence, records);
+    return NextResponse.json({
+      ok: true,
+      ...saved,
+      registeredCount: saved.savedCount,
+      registrationIds: saved.recordIds,
+    });
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: "保存前の確認内容が不正です。" }, { status: 400 });
     const message = error instanceof SurveyRecordPersistenceError ? error.message : "調査データの保存に失敗しました。";
