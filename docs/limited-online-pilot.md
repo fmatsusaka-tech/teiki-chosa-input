@@ -13,7 +13,6 @@
 `.env.local`へ次を設定します。値はGitHub、チャット、スクリーンショットへ貼り付けません。
 
 ```dotenv
-PILOT_USERNAME=試用者へ伝えるユーザー名
 PILOT_PASSWORD=十分に長い共有パスワード
 GOOGLE_SHEETS_SPREADSHEET_ID=開発用SpreadsheetのID
 GOOGLE_SERVICE_ACCOUNT_EMAIL=サービスアカウント
