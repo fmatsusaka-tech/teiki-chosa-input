@@ -10,19 +10,24 @@ type AppsScriptHelpers = {
     surveyHeaders: string[],
   ) => unknown[];
   surveyDateParts_: (value: unknown) => { year: number; month: number; day: number } | null;
+  validateCanonicalHeaders_: (headers: string[]) => string[];
+  optionalNumber_: (value: unknown) => number | "";
 };
 
 function loadHelpers(): AppsScriptHelpers {
   const source = readFileSync(new URL("./Code.gs", import.meta.url), "utf8");
   const context: Record<string, unknown> = {};
   vm.runInNewContext(
-    `${source}\nthis.helpers = { ensureDiameterOutputHeaders_, buildSurveyDataRow_, surveyDateParts_ };`,
+    `${source}\nthis.helpers = { ensureDiameterOutputHeaders_, buildSurveyDataRow_, surveyDateParts_, validateCanonicalHeaders_, optionalNumber_ };`,
     context,
   );
   return context.helpers as AppsScriptHelpers;
 }
 
-const { ensureDiameterOutputHeaders_, buildSurveyDataRow_, surveyDateParts_ } = loadHelpers();
+const {
+  ensureDiameterOutputHeaders_, buildSurveyDataRow_, surveyDateParts_,
+  validateCanonicalHeaders_, optionalNumber_,
+} = loadHelpers();
 
 describe("調査データの横径変換", () => {
   it("備考の後に玉1〜玉10を置き、既存列の順序を維持する", () => {
@@ -106,5 +111,42 @@ describe("調査データの横径変換", () => {
     expect(validRow).toEqual([8, "前半", "", "有効"]);
     expect(invalidRow).toEqual(["", "", "", "要確認"]);
     expect(surveyDateParts_("不明")).toBeNull();
+  });
+
+  it("正本の取消状態を派生判定で上書きしない", () => {
+    const rawHeaders = ["計測日", "園地名", "品種", "データ状態"];
+    const surveyHeaders = ["調査日", "園地", "品種", "データ状態"];
+    const row = buildSurveyDataRow_(
+      rawHeaders,
+      [new Date(2026, 6, 25), "徳田", "早生", "取消"],
+      surveyHeaders,
+    );
+    expect(row[surveyHeaders.indexOf("データ状態")]).toBe("取消");
+  });
+});
+
+describe("Input正本契約", () => {
+  const canonicalHeaders = [
+    "登録ID", "編集キーハッシュ", "登録日時", "更新日時", "改訂番号", "データ状態",
+    "計測日", "園地名", "品種", "処理区", "備考",
+    ...Array.from({ length: 10 }, (_, index) => `横径${index + 1}`),
+    "糖度", "酸度", "入力方法", "入力者", "送信元", "原文メモ",
+  ];
+
+  it("列順が変わっても正式見出しを受け付ける", () => {
+    const reordered = [...canonicalHeaders].reverse();
+    expect(validateCanonicalHeaders_(reordered)).toEqual(reordered);
+  });
+
+  it("不足見出しと重複見出しを拒否する", () => {
+    expect(() => validateCanonicalHeaders_(canonicalHeaders.slice(1))).toThrow(/不足: 登録ID/);
+    expect(() => validateCanonicalHeaders_([...canonicalHeaders, "登録ID"])).toThrow(/重複: 登録ID/);
+  });
+
+  it("数値欠測を0へ変換しない", () => {
+    expect(optionalNumber_(null)).toBe("");
+    expect(optionalNumber_("")).toBe("");
+    expect(optionalNumber_(0)).toBe(0);
+    expect(optionalNumber_("10.5")).toBe(10.5);
   });
 });

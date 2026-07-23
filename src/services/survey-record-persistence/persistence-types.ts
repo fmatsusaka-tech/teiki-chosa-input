@@ -3,6 +3,8 @@ import type { SurveyRecord } from "../../domain/survey-record";
 export type SaveSurveyRecordsResult = {
   savedCount: number;
   recordIds: string[];
+  /** Returned once so a future UI can construct an edit URL. Never persist these plaintext keys. */
+  editCredentials?: Array<{ recordId: string; editKey: string }>;
 };
 
 /**

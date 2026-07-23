@@ -12,3 +12,4 @@ export {
   SURVEY_RAW_HEADERS,
 } from "./google-sheets-persistence";
 export type { GoogleSheetsSurveyRecordPersistenceOptions } from "./google-sheets-persistence";
+export { createEditKey, hashEditKey } from "./edit-key";

@@ -1,5 +1,6 @@
 import type { SurveyRecord } from "../../domain/survey-record";
 import type { GoogleSheetsClient } from "./google-sheets-client";
+import { createEditKey, hashEditKey } from "./edit-key";
 import { SurveyRecordPersistenceError } from "./persistence-error";
 import type { SaveSurveyRecordsResult, SurveyRecordPersistence } from "./persistence-types";
 
@@ -7,7 +8,8 @@ export const DEFAULT_SURVEY_SPREADSHEET_ID = "1Ix7qFigeUvmxkEl3C51rmzuBzYDq7OR_Z
 export const DEFAULT_SURVEY_RAW_SHEET_NAME = "調査原票";
 
 export const SURVEY_RAW_HEADERS = [
-  "登録ID", "登録日時", "計測日", "園地名", "品種", "処理区", "備考",
+  "登録ID", "編集キーハッシュ", "登録日時", "更新日時", "改訂番号", "データ状態",
+  "計測日", "園地名", "品種", "処理区", "備考",
   "横径1", "横径2", "横径3", "横径4", "横径5", "横径6", "横径7", "横径8", "横径9", "横径10",
   "糖度", "酸度", "入力方法", "入力者", "送信元", "原文メモ",
 ] as const;
@@ -22,6 +24,9 @@ export type GoogleSheetsSurveyRecordPersistenceOptions = {
   origin?: string;
   sourceText?: string;
   createId?: () => string;
+  createEditKey?: () => string;
+  hashEditKey?: (editKey: string) => string;
+  now?: () => Date;
 };
 
 function missingCell(value: number | null | undefined): CellValue {
@@ -31,12 +36,18 @@ function missingCell(value: number | null | undefined): CellValue {
 function recordCells(
   record: SurveyRecord,
   id: string,
+  editKeyHash: string,
+  registeredAt: string,
   options: GoogleSheetsSurveyRecordPersistenceOptions,
 ): Record<RawHeader, CellValue> {
   const diameters = Array.from({ length: 10 }, (_, index) => missingCell(record.diametersMm[index]));
   return {
     登録ID: id,
-    登録日時: record.registeredAt,
+    編集キーハッシュ: editKeyHash,
+    登録日時: registeredAt,
+    更新日時: registeredAt,
+    改訂番号: 1,
+    データ状態: "有効",
     計測日: record.measuredAt,
     園地名: record.orchard,
     品種: record.variety,
@@ -73,6 +84,9 @@ export class GoogleSheetsSurveyRecordPersistence implements SurveyRecordPersiste
   private readonly spreadsheetId: string;
   private readonly sheetName: string;
   private readonly createId: () => string;
+  private readonly createEditKey: () => string;
+  private readonly hashEditKey: (editKey: string) => string;
+  private readonly now: () => Date;
 
   constructor(
     private readonly client: GoogleSheetsClient,
@@ -81,17 +95,32 @@ export class GoogleSheetsSurveyRecordPersistence implements SurveyRecordPersiste
     this.spreadsheetId = options.spreadsheetId ?? DEFAULT_SURVEY_SPREADSHEET_ID;
     this.sheetName = options.sheetName ?? DEFAULT_SURVEY_RAW_SHEET_NAME;
     this.createId = options.createId ?? (() => crypto.randomUUID());
+    this.createEditKey = options.createEditKey ?? createEditKey;
+    this.hashEditKey = options.hashEditKey ?? hashEditKey;
+    this.now = options.now ?? (() => new Date());
   }
 
   async save(records: readonly SurveyRecord[]): Promise<SaveSurveyRecordsResult> {
     const headers = resolveColumns(await this.client.getHeaderRow(this.spreadsheetId, this.sheetName));
     const recordIds = records.map((record) => record.id ?? this.createId());
+    const editKeys = records.map(() => this.createEditKey());
+    const registeredAt = this.now().toISOString();
     const rows = records.map((record, index) => {
-      const cells = recordCells(record, recordIds[index], this.options);
+      const cells = recordCells(
+        record,
+        recordIds[index],
+        this.hashEditKey(editKeys[index]),
+        registeredAt,
+        this.options,
+      );
       return headers.map((header) => cells[header] ?? "");
     });
 
     await this.client.appendRows({ spreadsheetId: this.spreadsheetId, sheetName: this.sheetName, rows });
-    return { savedCount: rows.length, recordIds };
+    return {
+      savedCount: rows.length,
+      recordIds,
+      editCredentials: recordIds.map((recordId, index) => ({ recordId, editKey: editKeys[index] })),
+    };
   }
 }

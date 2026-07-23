@@ -28,15 +28,29 @@ describe("GoogleSheetsSurveyRecordPersistence", () => {
     const client = clientWithHeaders();
     const persistence = new GoogleSheetsSurveyRecordPersistence(client, {
       operator: "調査担当", origin: "OCR確認画面", sourceText: "徳田 早生",
+      createEditKey: () => "one-time-edit-key",
+      hashEditKey: (key) => `hashed:${key}`,
+      now: () => new Date("2026-07-20T00:00:00.000Z"),
     });
 
-    await expect(persistence.save([record])).resolves.toEqual({ savedCount: 1, recordIds: [record.id] });
+    await expect(persistence.save([record])).resolves.toEqual({
+      savedCount: 1,
+      recordIds: [record.id],
+      editCredentials: [{ recordId: record.id, editKey: "one-time-edit-key" }],
+    });
     expect(client.getHeaderRow).toHaveBeenCalledWith(DEFAULT_SURVEY_SPREADSHEET_ID, DEFAULT_SURVEY_RAW_SHEET_NAME);
     expect(client.appendRows).toHaveBeenCalledWith(expect.objectContaining({
       spreadsheetId: DEFAULT_SURVEY_SPREADSHEET_ID,
       sheetName: "調査原票",
       rows: [expect.arrayContaining([record.id, "徳田", "早生", "マルチ", "調査担当", "OCR確認画面", "徳田 早生"])],
     }));
+    const row = client.appendRows.mock.calls[0][0].rows[0];
+    expect(row[SURVEY_RAW_HEADERS.indexOf("編集キーハッシュ")]).toBe("hashed:one-time-edit-key");
+    expect(row[SURVEY_RAW_HEADERS.indexOf("登録日時")]).toBe("2026-07-20T00:00:00.000Z");
+    expect(row[SURVEY_RAW_HEADERS.indexOf("更新日時")]).toBe("2026-07-20T00:00:00.000Z");
+    expect(row[SURVEY_RAW_HEADERS.indexOf("改訂番号")]).toBe(1);
+    expect(row[SURVEY_RAW_HEADERS.indexOf("データ状態")]).toBe("有効");
+    expect(row).not.toContain("one-time-edit-key");
   });
 
   it("resolves positions from reordered header names and leaves missing measurements blank", async () => {
@@ -64,5 +78,12 @@ describe("GoogleSheetsSurveyRecordPersistence", () => {
     const persistence = new GoogleSheetsSurveyRecordPersistence(client, { createId: () => "generated-id" });
 
     await expect(persistence.save([{ ...record, id: undefined }])).resolves.toMatchObject({ recordIds: ["generated-id"] });
+  });
+
+  it("rejects duplicate headers without writing", async () => {
+    const client = clientWithHeaders([...SURVEY_RAW_HEADERS, "登録ID"]);
+    await expect(new GoogleSheetsSurveyRecordPersistence(client).save([record]))
+      .rejects.toMatchObject({ code: "PROVIDER_ERROR" });
+    expect(client.appendRows).not.toHaveBeenCalled();
   });
 });
