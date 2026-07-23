@@ -12,6 +12,8 @@ describe("pilot auth", () => {
     expect(isPublicPilotPath("/login/")).toBe(true);
     expect(isPublicPilotPath("/api/pilot-login")).toBe(true);
     expect(isPublicPilotPath("/api/pilot-login/")).toBe(true);
+    expect(isPublicPilotPath("/api/health")).toBe(true);
+    expect(isPublicPilotPath("/api/health/")).toBe(true);
     expect(isPublicPilotPath("/")).toBe(false);
     expect(isPublicPilotPath("/api/survey-records/")).toBe(false);
   });

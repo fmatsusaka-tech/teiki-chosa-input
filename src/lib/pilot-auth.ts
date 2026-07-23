@@ -4,6 +4,8 @@ const PUBLIC_PILOT_PATHS = new Set([
   "/login/",
   "/api/pilot-login",
   "/api/pilot-login/",
+  "/api/health",
+  "/api/health/",
 ]);
 
 export function isPublicPilotPath(pathname: string): boolean {
