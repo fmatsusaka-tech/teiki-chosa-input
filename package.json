@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "start:cloud": "next start -H 0.0.0.0 -p ${PORT:-10000}",
     "start:pilot": "next start -H 127.0.0.1 -p 3002",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
