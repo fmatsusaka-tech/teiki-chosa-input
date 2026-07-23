@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import {
   createPilotSessionToken,
+  isPublicPilotPath,
   PILOT_SESSION_COOKIE,
   readPilotPassword,
   safeEqual,
@@ -14,7 +15,7 @@ export async function middleware(request: NextRequest) {
   }
 
   const path = request.nextUrl.pathname;
-  if (path === "/login" || path === "/api/pilot-login") {
+  if (isPublicPilotPath(path)) {
     return NextResponse.next();
   }
 
