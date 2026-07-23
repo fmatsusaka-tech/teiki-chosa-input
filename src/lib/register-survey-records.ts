@@ -9,39 +9,21 @@ export type RegistrationResult = {
   error?: string;
 };
 
-const DEFAULT_ENDPOINT =
-  "https://script.google.com/macros/s/AKfycbxPLpa_VKfPueCEjTMEM4-QbotW6nbGnbyk4KqBWJSMn4aRqFLx-9kheb4jxCeAWPk/exec";
-
-const endpoint = process.env.NEXT_PUBLIC_GAS_WEB_APP_URL || DEFAULT_ENDPOINT;
-
 export async function registerSurveyRecords(
   records: SurveyRecord[],
   sourceText: string,
   operator = "",
 ): Promise<RegistrationResult> {
   const payload = {
-    records: records.map((record) => ({
-      id: record.id,
-      measuredAt: record.measuredAt,
-      orchard: record.orchard,
-      variety: record.variety,
-      treatment: "",
-      notes: record.notes,
-      diametersMm: record.diametersMm,
-      brix: record.brix,
-      acidity: record.acidity,
-      source: record.source,
-    })),
+    records,
     operator,
-    origin: window.location.href,
     sourceText,
   };
 
-  const response = await fetch(endpoint, {
+  const response = await fetch("/api/survey-records", {
     method: "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
-    redirect: "follow",
   });
 
   if (!response.ok) {
