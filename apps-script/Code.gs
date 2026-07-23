@@ -3,6 +3,12 @@ const RAW_SHEET_NAME = "調査原票";
 const SURVEY_SHEET_NAME = "調査データ";
 const API_TOKEN_PROPERTY = "API_TOKEN";
 const MAX_DIAMETERS = 10;
+const CANONICAL_RAW_HEADERS = [
+  "登録ID", "編集キーハッシュ", "登録日時", "更新日時", "改訂番号", "データ状態",
+  "計測日", "園地名", "品種", "処理区", "備考",
+  "横径1", "横径2", "横径3", "横径4", "横径5", "横径6", "横径7", "横径8", "横径9", "横径10",
+  "糖度", "酸度", "入力方法", "入力者", "送信元", "原文メモ",
+];
 const DIAMETER_OUTPUT_HEADERS = Array.from(
   { length: MAX_DIAMETERS },
   (_, index) => `玉${index + 1}横径`,
@@ -29,10 +35,12 @@ function doPost(e) {
     if (!sheet) throw new Error(`シート「${RAW_SHEET_NAME}」が見つかりません。`);
 
     const rawHeaders = getHeaders_(sheet);
+    validateCanonicalHeaders_(rawHeaders);
     const existingIds = getExistingIds_(sheet, rawHeaders);
     const now = new Date();
     const rows = [];
     const acceptedIds = [];
+    const editCredentials = [];
     const skippedIds = [];
 
     payload.records.forEach((record, index) => {
@@ -48,17 +56,23 @@ function doPost(e) {
         ? record.diametersMm.slice(0, MAX_DIAMETERS)
         : [];
       while (diameters.length < MAX_DIAMETERS) diameters.push("");
+      const editKey = createEditKey_();
+      const editKeyHash = hashEditKey_(editKey);
 
       const cells = {
         登録ID: registrationId,
+        編集キーハッシュ: editKeyHash,
         登録日時: now,
+        更新日時: now,
+        改訂番号: 1,
+        データ状態: "有効",
         計測日: new Date(record.measuredAt),
         園地名: cleanText_(record.orchard),
         品種: cleanText_(record.variety),
         処理区: cleanText_(record.treatment || ""),
         備考: cleanText_(record.notes || ""),
-        糖度: Number(record.brix),
-        酸度: Number(record.acidity),
+        糖度: optionalNumber_(record.brix),
+        酸度: optionalNumber_(record.acidity),
         入力方法: cleanText_(record.source || "text"),
         入力者: cleanText_(payload.operator || record.operator || ""),
         送信元: cleanText_(payload.client || "定期調査入力アプリ"),
@@ -69,13 +83,14 @@ function doPost(e) {
       });
       rows.push(rowForHeaders_(cells, rawHeaders));
       acceptedIds.push(registrationId);
+      editCredentials.push({ registrationId, editKey });
       existingIds.add(registrationId);
     });
 
     if (rows.length > 0) {
       const startRow = sheet.getLastRow() + 1;
       sheet.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
-      ["登録日時", "計測日"].forEach((header) => {
+      ["登録日時", "更新日時", "計測日"].forEach((header) => {
         const columnIndex = rawHeaders.indexOf(header);
         if (columnIndex >= 0) {
           sheet.getRange(startRow, columnIndex + 1, rows.length, 1).setNumberFormat("yyyy/mm/dd hh:mm:ss");
@@ -88,6 +103,7 @@ function doPost(e) {
       registeredCount: rows.length,
       skippedCount: skippedIds.length,
       registrationIds: acceptedIds,
+      editCredentials,
       skippedIds,
     });
   } catch (error) {
@@ -99,6 +115,49 @@ function doPost(e) {
   } finally {
     try { lock.releaseLock(); } catch (_) {}
   }
+}
+
+/**
+ * Add missing canonical columns without moving, renaming, or deleting existing columns.
+ * Existing records cannot receive a usable edit key retroactively, so their hash remains blank.
+ */
+function setupCanonicalRawSheet() {
+  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(RAW_SHEET_NAME);
+  if (!sheet) throw new Error(`シート「${RAW_SHEET_NAME}」が見つかりません。`);
+
+  const originalHeaders = getHeaders_(sheet);
+  const duplicates = originalHeaders.filter((header, index) => originalHeaders.indexOf(header) !== index);
+  if (duplicates.length > 0) {
+    throw new Error(`調査原票の見出しが重複しています: ${[...new Set(duplicates)].join(", ")}`);
+  }
+  const missingHeaders = CANONICAL_RAW_HEADERS.filter((header) => !originalHeaders.includes(header));
+  if (missingHeaders.length > 0) {
+    const startColumn = Math.max(sheet.getLastColumn(), 0) + 1;
+    sheet.getRange(1, startColumn, 1, missingHeaders.length).setValues([missingHeaders]);
+  }
+
+  const headers = getHeaders_(sheet);
+  const rowCount = Math.max(sheet.getLastRow() - 1, 0);
+  if (rowCount === 0) return { addedHeaders: missingHeaders, updatedRows: 0 };
+
+  const registeredAtColumn = headers.indexOf("登録日時") + 1;
+  const updatedAtColumn = headers.indexOf("更新日時") + 1;
+  const revisionColumn = headers.indexOf("改訂番号") + 1;
+  const statusColumn = headers.indexOf("データ状態") + 1;
+  const registeredValues = sheet.getRange(2, registeredAtColumn, rowCount, 1).getValues();
+  const updatedValues = sheet.getRange(2, updatedAtColumn, rowCount, 1).getValues();
+  const revisionValues = sheet.getRange(2, revisionColumn, rowCount, 1).getValues();
+  const statusValues = sheet.getRange(2, statusColumn, rowCount, 1).getValues();
+
+  for (let index = 0; index < rowCount; index += 1) {
+    if (updatedValues[index][0] === "") updatedValues[index][0] = registeredValues[index][0];
+    if (revisionValues[index][0] === "") revisionValues[index][0] = 1;
+    if (statusValues[index][0] === "") statusValues[index][0] = "有効";
+  }
+  sheet.getRange(2, updatedAtColumn, rowCount, 1).setValues(updatedValues).setNumberFormat("yyyy/mm/dd hh:mm:ss");
+  sheet.getRange(2, revisionColumn, rowCount, 1).setValues(revisionValues);
+  sheet.getRange(2, statusColumn, rowCount, 1).setValues(statusValues);
+  return { addedHeaders: missingHeaders, updatedRows: rowCount };
 }
 
 /**
@@ -163,7 +222,8 @@ function buildSurveyDataRow_(rawHeaders, rawRow, surveyHeaders) {
   cells["横径最小"] = numericDiameters.length ? Math.min(...numericDiameters) : "";
   cells["横径最大"] = numericDiameters.length ? Math.max(...numericDiameters) : "";
   cells["糖酸比"] = sugarAcidRatio_(raw["糖度"], raw["酸度"]);
-  cells["データ状態"] = surveyDataStatus_(measuredAt, cells["園地"], raw["品種"]);
+  cells["データ状態"] = cleanText_(raw["データ状態"])
+    || surveyDataStatus_(measuredAt, cells["園地"], raw["品種"]);
   return rowForHeaders_(cells, surveyHeaders);
 }
 
@@ -238,15 +298,52 @@ function validateRecord_(record, index) {
   if (!cleanText_(record.variety) || record.variety === "未設定") {
     throw new Error(`${label}の品種が未入力です。`);
   }
-  if (!Array.isArray(record.diametersMm) || record.diametersMm.length === 0) {
-    throw new Error(`${label}の横径が未入力です。`);
+  if (record.diametersMm !== undefined && !Array.isArray(record.diametersMm)) {
+    throw new Error(`${label}の横径の形式が不正です。`);
   }
-  if (record.brix === null || record.brix === "" || !Number.isFinite(Number(record.brix))) {
-    throw new Error(`${label}の糖度が未入力です。`);
+  if (Array.isArray(record.diametersMm)
+    && record.diametersMm.some((value) => value === "" || !Number.isFinite(Number(value)) || Number(value) <= 0)) {
+    throw new Error(`${label}の横径に不正な値があります。`);
   }
-  if (record.acidity === null || record.acidity === "" || !Number.isFinite(Number(record.acidity))) {
-    throw new Error(`${label}の酸度が未入力です。`);
+  if (!isMissing_(record.brix) && (!Number.isFinite(Number(record.brix)) || Number(record.brix) < 0)) {
+    throw new Error(`${label}の糖度が不正です。`);
   }
+  if (!isMissing_(record.acidity) && (!Number.isFinite(Number(record.acidity)) || Number(record.acidity) < 0)) {
+    throw new Error(`${label}の酸度が不正です。`);
+  }
+}
+
+function validateCanonicalHeaders_(headers) {
+  const duplicates = headers.filter((header, index) => headers.indexOf(header) !== index);
+  const missing = CANONICAL_RAW_HEADERS.filter((header) => !headers.includes(header));
+  if (duplicates.length > 0 || missing.length > 0) {
+    const details = [
+      missing.length > 0 ? `不足: ${missing.join(", ")}` : "",
+      duplicates.length > 0 ? `重複: ${[...new Set(duplicates)].join(", ")}` : "",
+    ].filter(Boolean).join(" / ");
+    throw new Error(`調査原票の見出しが保存仕様と一致しません（${details}）。`);
+  }
+  return headers;
+}
+
+function isMissing_(value) {
+  return value === null || value === undefined || value === "";
+}
+
+function optionalNumber_(value) {
+  return isMissing_(value) ? "" : Number(value);
+}
+
+function createEditKey_() {
+  return `${Utilities.getUuid().replace(/-/g, "")}${Utilities.getUuid().replace(/-/g, "")}`;
+}
+
+function hashEditKey_(editKey) {
+  return Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    editKey,
+    Utilities.Charset.UTF_8,
+  ).map((byte) => ((byte + 256) % 256).toString(16).padStart(2, "0")).join("");
 }
 
 function getExistingIds_(sheet, headers) {

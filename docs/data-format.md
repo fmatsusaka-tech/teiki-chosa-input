@@ -43,6 +43,19 @@ interface ParseResult {
 ```
 
 登録前は `SurveyRecordDraft` として扱い、`recordId` と `registeredAt` は保存時に確定する。
+永続化する正本の正式な見出しと欠測値規則は
+[Input正本データ辞書](input-data-dictionary.md)を参照する。
+
+保存境界では、ドメインの観測値とは分離して次の管理情報を付与する。
+
+```ts
+interface RecordManagementMetadata {
+  editKeyHash: string; // Input内部だけで保持し、Outputへ公開しない
+  updatedAt: string; // ISO 8601
+  revision: number; // 初回1
+  dataStatus: "有効" | "要確認" | "取消";
+}
+```
 
 ## 横径
 
