@@ -31,7 +31,7 @@ PADDLE_OCR_ENDPOINT=http://127.0.0.1:8765
 2. `npm.cmd run build`を実行する。
 3. `npm.cmd run start:pilot`でアプリを`127.0.0.1:3002`へ起動する。
 4. `http://127.0.0.1:3002/api/health`を認証付きで開き、`app`と`ocr`が`ok`であることを確認する。
-5. `cloudflared tunnel --url http://127.0.0.1:3002`を起動する。
+5. `.\.tools\cloudflared.exe tunnel --url http://127.0.0.1:3002`を起動する。
 6. 表示された`https://*.trycloudflare.com`のURLと共有認証情報を試用者へ別々に伝える。
 
 ## 停止
