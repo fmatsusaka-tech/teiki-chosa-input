@@ -1,7 +1,18 @@
 import type { ParsedSurveyBatch, SurveyRecord } from "./survey-record";
 import { orchardMasters, orchardVarietyDefaults } from "./survey-masters";
 
-const orchardNames = new Set(orchardMasters.flatMap((item) => [item.canonicalName, ...item.aliases]).map(normalizeOrchard));
+const orchardHeadingMap = new Map(
+  orchardMasters.flatMap((item) =>
+    [item.canonicalName, ...item.aliases].map((name) => [
+      normalizeOrchard(name),
+      item.canonicalName,
+    ]),
+  ),
+);
+const compoundHeadingMap = new Map<string, { orchard: string; variety: string }>([
+  ["出雲田口", { orchard: "出雲田口", variety: "田口" }],
+  ["越間ゆら", { orchard: "越間", variety: "ゆら早生" }],
+]);
 const treatmentNames = new Set(["無処理区", "スキー", "ミヨビ"]);
 const fullDatePattern = /^\d{4}[/-]\d{1,2}[/-]\d{1,2}$/;
 const shortDatePattern = /^\d{1,2}[/-]\d{1,2}$/;
@@ -66,6 +77,7 @@ export function parseSurveyMemo(
 
   let measuredAt = registeredAt;
   let currentOrchard = "";
+  let currentVariety: string | null = null;
   let currentTreatment = "";
   let currentNotes: string[] = [];
   let numericLines: string[] = [];
@@ -86,7 +98,7 @@ export function parseSurveyMemo(
       return parsed.value;
     });
 
-    const variety = orchardVarietyDefaults[currentOrchard] ?? "未設定";
+    const variety = currentVariety ?? orchardVarietyDefaults[currentOrchard] ?? "未設定";
     if (variety === "未設定") warnings.push("品種を特定できませんでした");
     if (diametersMm.length < 5) warnings.push(`横径が${diametersMm.length}個です`);
     if (brix === null) warnings.push("糖度が未入力です");
@@ -130,9 +142,12 @@ export function parseSurveyMemo(
     }
 
     const normalized = normalizeOrchard(line);
-    if (orchardNames.has(normalized)) {
+    const compoundHeading = compoundHeadingMap.get(normalized);
+    const orchard = compoundHeading?.orchard ?? orchardHeadingMap.get(normalized);
+    if (orchard) {
       flush();
-      currentOrchard = normalized;
+      currentOrchard = orchard;
+      currentVariety = compoundHeading?.variety ?? null;
       currentTreatment = "";
       currentNotes = [];
       continue;
