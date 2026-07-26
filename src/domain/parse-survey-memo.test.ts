@@ -339,4 +339,42 @@ describe("parseSurveyMemo", () => {
       diametersMm: [41, 42, 43],
     });
   });
+
+  it("外部マスタの園地別名に続く品種を園地として上書きしない", () => {
+    const result = parseSurveyMemo(
+      `トクダ
+早生
+41
+42
+10.5`,
+      "2026-07-26T00:00:00.000Z",
+      {
+        orchards: [
+          {
+            id: "tokuda",
+            canonicalName: "徳田",
+            aliases: ["トクダ"],
+            isActive: true,
+          },
+        ],
+        varieties: [
+          {
+            id: "wase",
+            canonicalName: "早生",
+            aliases: [],
+            isActive: true,
+          },
+        ],
+        treatments: [],
+        orchardVarietyDefaults: {},
+      },
+    );
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]).toMatchObject({
+      orchard: "徳田",
+      variety: "早生",
+      diametersMm: [41, 42, 10.5],
+    });
+  });
 });
