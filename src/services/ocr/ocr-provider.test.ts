@@ -93,7 +93,12 @@ describe("OCR DTO and errors", () => {
   });
 
   it("keeps an unavailable PaddleOCR sidecar from preventing construction", async () => {
-    const provider = createOcrProvider({ env: {} });
+    const provider = createOcrProvider({
+      env: {
+        PADDLE_OCR_ENDPOINT: "http://127.0.0.1:1",
+        PADDLE_OCR_TIMEOUT_MS: "100",
+      },
+    });
 
     await expect(provider.checkAvailability()).resolves.toMatchObject({
       available: false,
