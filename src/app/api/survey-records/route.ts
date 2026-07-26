@@ -7,6 +7,7 @@ import {
   GoogleSheetsRestClient, GoogleSheetsSurveyRecordPersistence, saveSurveyRecords,
   SurveyRecordPersistenceError,
 } from "../../../services/survey-record-persistence";
+import { appendCorrectionLog } from "../../../services/survey-masters/correction-log";
 
 const ocrRequestSchema = z.object({
   candidates: z.array(surveyParseCandidateSchema).min(1),
@@ -48,14 +49,23 @@ export async function POST(request: Request) {
     } else {
       return NextResponse.json({ error: "保存前の確認内容が不正です。" }, { status: 400 });
     }
-    const persistence = new GoogleSheetsSurveyRecordPersistence(GoogleSheetsRestClient.fromEnvironment(), {
-      spreadsheetId: process.env.GOOGLE_SHEETS_SPREADSHEET_ID,
+    const client = GoogleSheetsRestClient.fromEnvironment();
+    const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
+    const persistence = new GoogleSheetsSurveyRecordPersistence(client, {
+      spreadsheetId,
       sheetName: "調査原票",
       operator,
       origin,
       sourceText,
     });
     const saved = await saveSurveyRecords(persistence, records);
+    if (spreadsheetId) {
+      try {
+        await appendCorrectionLog(client, spreadsheetId, sourceText, records);
+      } catch {
+        // Learning data is best-effort and must never block the authoritative save.
+      }
+    }
     return NextResponse.json({
       ok: true,
       ...saved,

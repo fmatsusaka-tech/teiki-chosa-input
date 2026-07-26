@@ -38,6 +38,18 @@ export class GoogleSheetsRestClient implements GoogleSheetsClient {
     return (payload.values?.[0] ?? []).map(String);
   }
 
+  async getRows(
+    spreadsheetId: string,
+    sheetName: string,
+  ): Promise<readonly (readonly string[])[]> {
+    const range = encodeURIComponent(`'${sheetName.replaceAll("'", "''")}'!A:Z`);
+    const response = await this.request(
+      `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${range}`,
+    );
+    const payload = await response.json() as { values?: unknown[][] };
+    return (payload.values ?? []).map((row) => row.map((cell) => String(cell)));
+  }
+
   async appendRows(request: GoogleSheetsAppendRequest): Promise<void> {
     const range = encodeURIComponent(`'${request.sheetName.replaceAll("'", "''")}'!A1`);
     await this.request(

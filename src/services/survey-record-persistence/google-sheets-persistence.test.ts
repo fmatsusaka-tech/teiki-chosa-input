@@ -19,6 +19,7 @@ const record: SurveyRecord = {
 function clientWithHeaders(headers: readonly string[] = SURVEY_RAW_HEADERS) {
   return {
     getHeaderRow: vi.fn().mockResolvedValue(headers),
+    getRows: vi.fn().mockResolvedValue([]),
     appendRows: vi.fn().mockResolvedValue(undefined),
   } satisfies GoogleSheetsClient;
 }

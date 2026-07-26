@@ -5,6 +5,13 @@ export type SurveyMasterItem = {
   isActive: boolean;
 };
 
+export type SurveyMasterCatalog = {
+  orchards: readonly SurveyMasterItem[];
+  varieties: readonly SurveyMasterItem[];
+  treatments: readonly SurveyMasterItem[];
+  orchardVarietyDefaults: Readonly<Record<string, string>>;
+};
+
 export const orchardMasters: readonly SurveyMasterItem[] = [
   { id: "arinaka", canonicalName: "有中", aliases: [], isActive: true },
   { id: "yoshikawa", canonicalName: "吉川", aliases: [], isActive: true },
@@ -17,7 +24,7 @@ export const orchardMasters: readonly SurveyMasterItem[] = [
   { id: "beni-higashi", canonicalName: "紅東", aliases: [], isActive: true },
   { id: "beni-izumo", canonicalName: "紅出雲", aliases: [], isActive: true },
   { id: "izumo-taguchi", canonicalName: "出雲田口", aliases: [], isActive: true },
-  { id: "koshima", canonicalName: "越間", aliases: [], isActive: true },
+  { id: "koshima", canonicalName: "越間", aliases: ["越間ゆら"], isActive: true },
 ];
 
 export const varietyMasters: readonly SurveyMasterItem[] = [
@@ -46,3 +53,16 @@ export const orchardVarietyDefaults: Readonly<Record<string, string>> = {
 export function getActiveMasterNames(items: readonly SurveyMasterItem[]): string[] {
   return items.filter((item) => item.isActive).map((item) => item.canonicalName);
 }
+
+export const treatmentMasters: readonly SurveyMasterItem[] = [
+  { id: "untreated", canonicalName: "無処理区", aliases: ["無処理"], isActive: true },
+  { id: "ski", canonicalName: "スキー", aliases: [], isActive: true },
+  { id: "miyobi", canonicalName: "ミヨビ", aliases: [], isActive: true },
+];
+
+export const defaultSurveyMasterCatalog: SurveyMasterCatalog = {
+  orchards: orchardMasters,
+  varieties: varietyMasters,
+  treatments: treatmentMasters,
+  orchardVarietyDefaults,
+};
