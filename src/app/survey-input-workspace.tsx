@@ -10,6 +10,10 @@ import {
 } from "react";
 import { parseSurveyMemo } from "../domain/parse-survey-memo";
 import {
+  applySurveyDate,
+  formatLocalSurveyDate,
+} from "../domain/survey-date";
+import {
   defaultSurveyMasterCatalog,
   type SurveyMasterCatalog,
 } from "../domain/survey-masters";
@@ -43,6 +47,7 @@ type RegistrationStatus =
 
 export function SurveyInputWorkspace() {
   const [sourceText, setSourceText] = useState("");
+  const [surveyDate, setSurveyDate] = useState(() => formatLocalSurveyDate());
   const [records, setRecords] = useState<SurveyRecord[]>([]);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
@@ -106,11 +111,12 @@ export function SurveyInputWorkspace() {
     }
 
     const parsed = parseSurveyMemo(text, new Date().toISOString(), masterCatalog);
-    setRecords(parsed.records);
-    setSelectedRows(new Set(parsed.records.map((_, index) => index)));
+    const datedRecords = applySurveyDate(parsed.records, surveyDate);
+    setRecords(datedRecords);
+    setSelectedRows(new Set(datedRecords.map((_, index) => index)));
     setExpandedRows(
       new Set(
-        parsed.records
+        datedRecords
           .map((record, index) =>
             record.brix === null ||
             record.acidity === null ||
@@ -122,7 +128,7 @@ export function SurveyInputWorkspace() {
       ),
     );
 
-    if (!hasAnalyzedRef.current && parsed.records.length > 0) {
+    if (!hasAnalyzedRef.current && datedRecords.length > 0) {
       hasAnalyzedRef.current = true;
       requestAnimationFrame(() =>
         resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
@@ -153,7 +159,7 @@ export function SurveyInputWorkspace() {
     const timer = window.setTimeout(() => analyzeText(sourceText), 700);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sourceText, masterCatalog]);
+  }, [sourceText, masterCatalog, surveyDate]);
 
   const toggleExpanded = (index: number) => {
     setExpandedRows((current) => {
@@ -310,6 +316,18 @@ export function SurveyInputWorkspace() {
           </div>
           <span className="status">自動解析</span>
         </div>
+
+        <label className="survey-date-field">
+          <span>調査日</span>
+          <input
+            type="date"
+            value={surveyDate}
+            onChange={(event) => {
+              if (event.target.value) setSurveyDate(event.target.value);
+            }}
+          />
+          <small>初期値は今日です。必要に応じて変更できます。</small>
+        </label>
 
         <textarea
           aria-label="調査内容"
