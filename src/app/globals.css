@@ -71,6 +71,10 @@ button:disabled { cursor: not-allowed; background: #dfe5df; color: #7d887f; }
 .login-card .primary-action { width: 100%; margin-top: 18px; background: #1f4d2b; color: #fff; border-color: #1f4d2b; }
 .login-card .primary-action:hover { background: #173d21; }
 .login-error { margin: 12px 0 0; color: #a12b1f; }
+.survey-date-field { display: grid; gap: 7px; margin-top: 18px; color: #59645b; font-size: 0.82rem; font-weight: 700; }
+.survey-date-field input { width: min(100%, 240px); min-height: 46px; padding: 10px 12px; border: 1px solid #cdd7ce; border-radius: 10px; background: #fafcf9; color: #172018; }
+.survey-date-field small { font-weight: 400; line-height: 1.5; }
+.survey-date-field + textarea { margin-top: 12px; }
 .input-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .temporary-photo-note { display: grid; gap: 3px; margin-top: 12px; padding: 12px; border-radius: 12px; background: #f5f7f2; font-size: 0.86rem; }
