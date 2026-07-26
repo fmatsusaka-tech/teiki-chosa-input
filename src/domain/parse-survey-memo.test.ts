@@ -228,4 +228,68 @@ describe("parseSurveyMemo", () => {
       diametersMm: [74.2, 72.4, 82.5, 71.5, 76.3, 80],
     });
   });
+
+  it("園地名と品種名を含む見出しを合意済みの組み合わせへ分ける", () => {
+    const result = parseSurveyMemo(`出雲田口
+35
+40
+39
+37
+38
+
+越間ゆら
+39
+35
+34
+33
+36`);
+
+    expect(result.records).toHaveLength(2);
+    expect(result.records[0]).toMatchObject({
+      orchard: "出雲田口",
+      variety: "田口",
+      diametersMm: [35, 40, 39, 37, 38],
+    });
+    expect(result.records[1]).toMatchObject({
+      orchard: "越間",
+      variety: "ゆら早生",
+      diametersMm: [39, 35, 34, 33, 36],
+    });
+  });
+
+  it("新しい園地名だけの見出しは品種未設定として解析する", () => {
+    const result = parseSurveyMemo(`紅下
+38
+40
+36
+34
+41
+
+紅東
+40
+40
+35
+36
+36
+35
+
+紅出雲
+40
+33
+38
+42
+36.5`);
+
+    expect(result.records.map((record) => record.orchard)).toEqual([
+      "紅下",
+      "紅東",
+      "紅出雲",
+    ]);
+    expect(result.records.every((record) => record.variety === "未設定")).toBe(true);
+    expect(
+      result.records.every((record) =>
+        record.warnings.includes("品種を特定できませんでした"),
+      ),
+    ).toBe(true);
+  });
 });
