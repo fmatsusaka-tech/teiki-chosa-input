@@ -292,4 +292,51 @@ describe("parseSurveyMemo", () => {
       ),
     ).toBe(true);
   });
+
+  it("マスタ未登録の園地でも数値のまとまりを候補として解析する", () => {
+    const result = parseSurveyMemo(`できたて新園地
+41
+42
+43
+44`);
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]).toMatchObject({
+      orchard: "できたて新園地",
+      variety: "未設定",
+      diametersMm: [41, 42, 43, 44],
+    });
+    expect(result.records[0].warnings).toContain(
+      "園地マスタ未登録です。園地名と品種を確認してください",
+    );
+  });
+
+  it("外部マスタの別名と既定品種を解析に使用する", () => {
+    const result = parseSurveyMemo(
+      `新園地ゆら
+41
+42
+43`,
+      "2026-07-26T00:00:00.000Z",
+      {
+        orchards: [
+          {
+            id: "new",
+            canonicalName: "新園地",
+            aliases: ["新園地ゆら"],
+            isActive: true,
+          },
+        ],
+        varieties: [],
+        treatments: [],
+        orchardVarietyDefaults: { 新園地: "ゆら早生" },
+      },
+    );
+
+    expect(result.records[0]).toMatchObject({
+      orchard: "新園地",
+      variety: "ゆら早生",
+      diametersMm: [41, 42, 43],
+    });
+  });
 });

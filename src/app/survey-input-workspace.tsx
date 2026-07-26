@@ -9,6 +9,10 @@ import {
   useState,
 } from "react";
 import { parseSurveyMemo } from "../domain/parse-survey-memo";
+import {
+  defaultSurveyMasterCatalog,
+  type SurveyMasterCatalog,
+} from "../domain/survey-masters";
 import type { SurveyRecord } from "../domain/survey-record";
 import { registerSurveyRecords } from "../lib/register-survey-records";
 
@@ -48,6 +52,9 @@ export function SurveyInputWorkspace() {
     kind: "idle",
     message: "",
   });
+  const [masterCatalog, setMasterCatalog] = useState<SurveyMasterCatalog>(
+    defaultSurveyMasterCatalog,
+  );
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const libraryInputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLElement>(null);
@@ -98,7 +105,7 @@ export function SurveyInputWorkspace() {
       return;
     }
 
-    const parsed = parseSurveyMemo(text);
+    const parsed = parseSurveyMemo(text, new Date().toISOString(), masterCatalog);
     setRecords(parsed.records);
     setSelectedRows(new Set(parsed.records.map((_, index) => index)));
     setExpandedRows(
@@ -124,11 +131,29 @@ export function SurveyInputWorkspace() {
   };
 
   useEffect(() => {
+    let active = true;
+    fetch("/api/survey-masters", { cache: "no-store" })
+      .then((response) => {
+        if (!response.ok) throw new Error("master request failed");
+        return response.json();
+      })
+      .then((payload: { catalog?: SurveyMasterCatalog }) => {
+        if (active && payload.catalog) setMasterCatalog(payload.catalog);
+      })
+      .catch(() => {
+        // The built-in catalog remains available when Google Sheets is unavailable.
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!sourceText.trim()) return;
     const timer = window.setTimeout(() => analyzeText(sourceText), 700);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sourceText]);
+  }, [sourceText, masterCatalog]);
 
   const toggleExpanded = (index: number) => {
     setExpandedRows((current) => {

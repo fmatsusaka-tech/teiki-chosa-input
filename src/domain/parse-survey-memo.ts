@@ -1,19 +1,8 @@
 import type { ParsedSurveyBatch, SurveyRecord } from "./survey-record";
-import { orchardMasters, orchardVarietyDefaults } from "./survey-masters";
-
-const orchardHeadingMap = new Map(
-  orchardMasters.flatMap((item) =>
-    [item.canonicalName, ...item.aliases].map((name) => [
-      normalizeOrchard(name),
-      item.canonicalName,
-    ]),
-  ),
-);
-const compoundHeadingMap = new Map<string, { orchard: string; variety: string }>([
-  ["出雲田口", { orchard: "出雲田口", variety: "田口" }],
-  ["越間ゆら", { orchard: "越間", variety: "ゆら早生" }],
-]);
-const treatmentNames = new Set(["無処理区", "スキー", "ミヨビ"]);
+import {
+  defaultSurveyMasterCatalog,
+  type SurveyMasterCatalog,
+} from "./survey-masters";
 const fullDatePattern = /^\d{4}[/-]\d{1,2}[/-]\d{1,2}$/;
 const shortDatePattern = /^\d{1,2}[/-]\d{1,2}$/;
 const numberPattern = /^-?\d+(?:\.\d+)?$/;
@@ -69,6 +58,7 @@ function hasSugarAcidPair(tokens: string[]): boolean {
 export function parseSurveyMemo(
   sourceText: string,
   registeredAt = new Date().toISOString(),
+  catalog: SurveyMasterCatalog = defaultSurveyMasterCatalog,
 ): ParsedSurveyBatch {
   const lines = sourceText
     .split(/\r?\n/)
@@ -83,6 +73,23 @@ export function parseSurveyMemo(
   let numericLines: string[] = [];
   const records: SurveyRecord[] = [];
   const batchWarnings: string[] = [];
+  const orchardHeadingMap = new Map(
+    catalog.orchards.flatMap((item) =>
+      [item.canonicalName, ...item.aliases].map((name) => [
+        normalizeOrchard(name),
+        item.canonicalName,
+      ]),
+    ),
+  );
+  const treatmentHeadingMap = new Map(
+    catalog.treatments.flatMap((item) =>
+      [item.canonicalName, ...item.aliases].map((name) => [
+        normalizeOrchard(name),
+        item.canonicalName,
+      ]),
+    ),
+  );
+  let currentOrchardIsUnregistered = false;
 
   const flush = () => {
     if (!currentOrchard || numericLines.length === 0) return;
@@ -98,7 +105,11 @@ export function parseSurveyMemo(
       return parsed.value;
     });
 
-    const variety = currentVariety ?? orchardVarietyDefaults[currentOrchard] ?? "未設定";
+    const variety =
+      currentVariety ?? catalog.orchardVarietyDefaults[currentOrchard] ?? "未設定";
+    if (currentOrchardIsUnregistered) {
+      warnings.push("園地マスタ未登録です。園地名と品種を確認してください");
+    }
     if (variety === "未設定") warnings.push("品種を特定できませんでした");
     if (diametersMm.length < 5) warnings.push(`横径が${diametersMm.length}個です`);
     if (brix === null) warnings.push("糖度が未入力です");
@@ -124,15 +135,17 @@ export function parseSurveyMemo(
     currentNotes = [];
   };
 
-  for (const line of lines) {
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex];
     if (fullDatePattern.test(line) || shortDatePattern.test(line)) {
       measuredAt = normalizeDate(line, registeredAt);
       continue;
     }
 
-    if (treatmentNames.has(line)) {
+    const treatment = treatmentHeadingMap.get(normalizeOrchard(line));
+    if (treatment) {
       if (numericLines.length > 0) flush();
-      currentTreatment = line;
+      currentTreatment = treatment;
       continue;
     }
 
@@ -142,12 +155,29 @@ export function parseSurveyMemo(
     }
 
     const normalized = normalizeOrchard(line);
-    const compoundHeading = compoundHeadingMap.get(normalized);
-    const orchard = compoundHeading?.orchard ?? orchardHeadingMap.get(normalized);
+    const orchard = orchardHeadingMap.get(normalized);
     if (orchard) {
       flush();
       currentOrchard = orchard;
-      currentVariety = compoundHeading?.variety ?? null;
+      currentVariety = null;
+      currentOrchardIsUnregistered = false;
+      currentTreatment = "";
+      currentNotes = [];
+      continue;
+    }
+
+    const followingNumericCount = lines
+      .slice(lineIndex + 1)
+      .findIndex((candidate) => !numberPattern.test(candidate));
+    const numericRunLength =
+      followingNumericCount < 0 ? lines.length - lineIndex - 1 : followingNumericCount;
+    const looksLikeUnknownOrchard =
+      numericRunLength > 0 && (numericLines.length === 0 || numericRunLength >= 3);
+    if (looksLikeUnknownOrchard) {
+      flush();
+      currentOrchard = normalized;
+      currentVariety = null;
+      currentOrchardIsUnregistered = true;
       currentTreatment = "";
       currentNotes = [];
       continue;
