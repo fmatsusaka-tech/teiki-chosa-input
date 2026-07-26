@@ -17,11 +17,13 @@ export async function GET() {
       },
       { headers: { "Cache-Control": "no-store" } },
     );
-  } catch {
+  } catch (error) {
     return NextResponse.json(
       {
         catalog: defaultSurveyMasterCatalog,
         source: "fallback",
+        fallbackReason:
+          error instanceof Error ? error.message : "入力マスタを取得できませんでした。",
       },
       { headers: { "Cache-Control": "no-store" } },
     );
