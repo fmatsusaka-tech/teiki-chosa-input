@@ -89,6 +89,14 @@ export function parseSurveyMemo(
       ]),
     ),
   );
+  const varietyHeadingMap = new Map(
+    catalog.varieties.flatMap((item) =>
+      [item.canonicalName, ...item.aliases].map((name) => [
+        normalizeOrchard(name),
+        item.canonicalName,
+      ]),
+    ),
+  );
   let currentOrchardIsUnregistered = false;
 
   const flush = () => {
@@ -163,6 +171,12 @@ export function parseSurveyMemo(
       currentOrchardIsUnregistered = false;
       currentTreatment = "";
       currentNotes = [];
+      continue;
+    }
+
+    const variety = varietyHeadingMap.get(normalized);
+    if (variety) {
+      currentVariety = variety;
       continue;
     }
 
