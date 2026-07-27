@@ -112,7 +112,8 @@ button:disabled { cursor: not-allowed; background: #dfe5df; color: #7d887f; }
 .record-detail { padding: 0 14px 16px 48px; }
 .record-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; padding: 12px; border-radius: 12px; background: #f5f7f2; }
 .record-fields label, .diameter-grid label { display: grid; gap: 5px; color: #59645b; font-size: 0.76rem; font-weight: 700; }
-.record-fields input, .diameter-grid input { width: 100%; padding: 10px; border: 1px solid #d6ddd6; border-radius: 9px; background: #fff; font-variant-numeric: tabular-nums; }
+.record-fields input, .record-fields select, .diameter-grid input { width: 100%; padding: 10px; border: 1px solid #d6ddd6; border-radius: 9px; background: #fff; font-variant-numeric: tabular-nums; }
+.record-fields .variety-custom-input { border-color: #78927d; }
 .record-fields .required-field { padding: 8px; border-radius: 10px; background: #fff6d8; color: #654900; }
 .record-fields .required-field input { border-color: #d7ae3f; }
 .diameter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(82px, 1fr)); gap: 8px; }

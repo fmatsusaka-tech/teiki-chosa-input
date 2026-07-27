@@ -19,6 +19,10 @@ import {
   type SurveyMasterCatalog,
 } from "../domain/survey-masters";
 import type { SurveyRecord } from "../domain/survey-record";
+import {
+  CUSTOM_VARIETY_OPTION,
+  resolveVarietyOption,
+} from "../domain/variety-input";
 import { registerSurveyRecords } from "../lib/register-survey-records";
 
 function average(values: number[]): number | null {
@@ -225,15 +229,20 @@ export function SurveyInputWorkspace() {
     );
   };
 
-  const focusNextField = (event: KeyboardEvent<HTMLInputElement>) => {
+  const focusNextField = (
+    event: KeyboardEvent<HTMLInputElement | HTMLSelectElement>,
+  ) => {
     if (event.key !== "Enter") return;
     event.preventDefault();
     const fields = Array.from(
-      document.querySelectorAll<HTMLInputElement>("[data-entry-field='true']"),
+      document.querySelectorAll<HTMLInputElement | HTMLSelectElement>(
+        "[data-entry-field='true']",
+      ),
     ).filter((field) => !field.disabled);
     const currentIndex = fields.indexOf(event.currentTarget);
-    fields[currentIndex + 1]?.focus();
-    fields[currentIndex + 1]?.select();
+    const nextField = fields[currentIndex + 1];
+    nextField?.focus();
+    if (nextField instanceof HTMLInputElement) nextField.select();
   };
 
   const clearInput = () => {
@@ -318,12 +327,6 @@ export function SurveyInputWorkspace() {
 
   return (
     <>
-      <datalist id="variety-suggestions">
-        {varietySuggestions.map((variety) => (
-          <option key={variety} value={variety} />
-        ))}
-      </datalist>
-
       <section className="panel" aria-labelledby="input-title">
         <div className="section-heading">
           <div>
@@ -476,14 +479,45 @@ export function SurveyInputWorkspace() {
                         </label>
                         <label>
                           <span>品種</span>
-                          <input
+                          <select
                             data-entry-field="true"
-                            list="variety-suggestions"
-                            value={record.variety}
+                            value={resolveVarietyOption(
+                              record.variety,
+                              varietySuggestions,
+                            )}
                             onKeyDown={focusNextField}
-                            onChange={(event) => updateRecord(index, "variety", event.target.value)}
-                          />
-                          <small>候補から選択、または新品種を自由入力できます。</small>
+                            onChange={(event) => {
+                              if (event.target.value === CUSTOM_VARIETY_OPTION) {
+                                if (varietySuggestions.includes(record.variety)) {
+                                  updateRecord(index, "variety", "");
+                                }
+                                return;
+                              }
+                              updateRecord(index, "variety", event.target.value);
+                            }}
+                          >
+                            {varietySuggestions.map((variety) => (
+                              <option key={variety} value={variety}>
+                                {variety}
+                              </option>
+                            ))}
+                            <option value={CUSTOM_VARIETY_OPTION}>
+                              自由入力（新品種など）
+                            </option>
+                          </select>
+                          {!varietySuggestions.includes(record.variety) && (
+                            <input
+                              className="variety-custom-input"
+                              data-entry-field="true"
+                              value={record.variety === "未設定" ? "" : record.variety}
+                              placeholder="品種名を入力"
+                              onKeyDown={focusNextField}
+                              onChange={(event) =>
+                                updateRecord(index, "variety", event.target.value)
+                              }
+                            />
+                          )}
+                          <small>新品種は「自由入力」を選んで入力できます。</small>
                         </label>
                         <label>
                           <span>処理区・備考</span>
