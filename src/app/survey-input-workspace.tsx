@@ -15,6 +15,7 @@ import {
 } from "../domain/survey-date";
 import {
   defaultSurveyMasterCatalog,
+  getActiveMasterNames,
   type SurveyMasterCatalog,
 } from "../domain/survey-masters";
 import type { SurveyRecord } from "../domain/survey-record";
@@ -67,6 +68,11 @@ export function SurveyInputWorkspace() {
   const warningCount = useMemo(
     () => records.filter((record) => visibleWarnings(record).length > 0).length,
     [records],
+  );
+
+  const varietySuggestions = useMemo(
+    () => getActiveMasterNames(masterCatalog.varieties),
+    [masterCatalog.varieties],
   );
 
   const missingBrixCount = useMemo(
@@ -312,6 +318,12 @@ export function SurveyInputWorkspace() {
 
   return (
     <>
+      <datalist id="variety-suggestions">
+        {varietySuggestions.map((variety) => (
+          <option key={variety} value={variety} />
+        ))}
+      </datalist>
+
       <section className="panel" aria-labelledby="input-title">
         <div className="section-heading">
           <div>
@@ -464,7 +476,14 @@ export function SurveyInputWorkspace() {
                         </label>
                         <label>
                           <span>品種</span>
-                          <input data-entry-field="true" value={record.variety} onKeyDown={focusNextField} onChange={(event) => updateRecord(index, "variety", event.target.value)} />
+                          <input
+                            data-entry-field="true"
+                            list="variety-suggestions"
+                            value={record.variety}
+                            onKeyDown={focusNextField}
+                            onChange={(event) => updateRecord(index, "variety", event.target.value)}
+                          />
+                          <small>候補から選択、または新品種を自由入力できます。</small>
                         </label>
                         <label>
                           <span>処理区・備考</span>
