@@ -11,8 +11,8 @@ const record: SurveyRecord = {
   registeredAt: "2026-07-19T01:00:00.000Z",
   orchard: "徳田",
   variety: "早生",
-  diametersMm: [],
-  brix: null,
+  diametersMm: [40.1],
+  brix: 10.5,
   acidity: null,
   notes: "",
   source: "screenshot",
@@ -32,16 +32,35 @@ describe("saveSurveyRecords", () => {
     expect(save).toHaveBeenCalledWith([record]);
   });
 
-  it("preserves missing optional measurements as null or an empty array", async () => {
+  it("permits missing acidity and preserves it as null", async () => {
     const save = vi.fn().mockResolvedValue({ savedCount: 1, recordIds: [] });
 
     await saveSurveyRecords({ save }, [record]);
 
     expect(save.mock.calls[0][0][0]).toMatchObject({
-      diametersMm: [],
-      brix: null,
+      diametersMm: [40.1],
+      brix: 10.5,
       acidity: null,
     });
+  });
+
+  it("rejects records without a diameter or brix", async () => {
+    const save = vi.fn();
+
+    await expect(saveSurveyRecords({ save }, [{ ...record, diametersMm: [] }]))
+      .rejects.toMatchObject({ code: "INVALID_RECORDS" });
+    await expect(saveSurveyRecords({ save }, [{ ...record, brix: null }]))
+      .rejects.toMatchObject({ code: "INVALID_RECORDS" });
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("rejects more than 10 diameters", async () => {
+    const save = vi.fn();
+    const diametersMm = Array.from({ length: 11 }, (_, index) => 40 + index);
+
+    await expect(saveSurveyRecords({ save }, [{ ...record, diametersMm }]))
+      .rejects.toMatchObject({ code: "INVALID_RECORDS" });
+    expect(save).not.toHaveBeenCalled();
   });
 
   it("rejects an empty batch before calling the provider", async () => {

@@ -32,8 +32,7 @@ function formatNumber(value: number | null, digits = 1) {
 function visibleWarnings(record: SurveyRecord): string[] {
   return record.warnings.filter((warning) => {
     if (warning === "糖度が未入力です" && record.brix !== null) return false;
-    if (warning === "酸度が未入力です" && record.acidity !== null) return false;
-    if (warning.startsWith("横径が") && record.diametersMm.length >= 5) return false;
+    if (warning.startsWith("横径が")) return false;
     if (warning === "品種を特定できませんでした" && record.variety !== "未設定") return false;
     return true;
   });
@@ -75,13 +74,8 @@ export function SurveyInputWorkspace() {
     [records],
   );
 
-  const missingAcidityCount = useMemo(
-    () => records.filter((record) => record.acidity === null).length,
-    [records],
-  );
-
   const shortDiameterCount = useMemo(
-    () => records.filter((record) => record.diametersMm.length < 5).length,
+    () => records.filter((record) => record.diametersMm.length === 0).length,
     [records],
   );
 
@@ -91,7 +85,6 @@ export function SurveyInputWorkspace() {
         (record, index) =>
           selectedRows.has(index) &&
           (record.brix === null ||
-            record.acidity === null ||
             record.diametersMm.length === 0 ||
             record.orchard.trim() === "" ||
             record.variety.trim() === "" ||
@@ -119,7 +112,6 @@ export function SurveyInputWorkspace() {
         datedRecords
           .map((record, index) =>
             record.brix === null ||
-            record.acidity === null ||
             record.variety === "未設定"
               ? index
               : -1,
@@ -202,15 +194,27 @@ export function SurveyInputWorkspace() {
   };
 
   const updateDiameter = (recordIndex: number, diameterIndex: number, rawValue: string) => {
+    if (rawValue === "") {
+      setRecords((current) =>
+        current.map((record, index) => {
+          if (index !== recordIndex) return record;
+          return {
+            ...record,
+            diametersMm: record.diametersMm.filter((_, index) => index !== diameterIndex),
+          };
+        }),
+      );
+      return;
+    }
     const value = Number(rawValue);
-    if (!Number.isFinite(value)) return;
+    if (!Number.isFinite(value) || value <= 0) return;
     setRegistrationStatus({ kind: "idle", message: "" });
     setRecords((current) =>
       current.map((record, index) => {
         if (index !== recordIndex) return record;
         const diametersMm = [...record.diametersMm];
         diametersMm[diameterIndex] = value;
-        return { ...record, diametersMm };
+        return { ...record, diametersMm: diametersMm.slice(0, 10) };
       }),
     );
   };
@@ -401,10 +405,9 @@ export function SurveyInputWorkspace() {
             </div>
           </div>
 
-          {(missingBrixCount > 0 || missingAcidityCount > 0 || shortDiameterCount > 0) && (
+          {(missingBrixCount > 0 || shortDiameterCount > 0) && (
             <div className="issue-summary" role="alert">
               {missingBrixCount > 0 && <span>糖度未入力：{missingBrixCount}件</span>}
-              {missingAcidityCount > 0 && <span>酸度未入力：{missingAcidityCount}件</span>}
               {shortDiameterCount > 0 && <span>横径不足：{shortDiameterCount}件</span>}
             </div>
           )}
@@ -471,17 +474,20 @@ export function SurveyInputWorkspace() {
                           <span>糖度{record.brix === null ? "（必須）" : ""}</span>
                           <input data-entry-field="true" type="number" inputMode="decimal" min="0" step="0.1" value={record.brix ?? ""} placeholder="例：12.5" onKeyDown={focusNextField} onChange={(event) => updateMeasurement(index, "brix", event.target.value)} />
                         </label>
-                        <label className={record.acidity === null ? "required-field" : ""}>
-                          <span>酸度{record.acidity === null ? "（必須）" : ""}</span>
+                        <label>
+                          <span>酸度（任意）</span>
                           <input data-entry-field="true" type="number" inputMode="decimal" min="0" step="0.01" value={record.acidity ?? ""} placeholder="例：0.85" onKeyDown={focusNextField} onChange={(event) => updateMeasurement(index, "acidity", event.target.value)} />
                         </label>
                       </div>
 
                       <div className="diameter-grid">
-                        {record.diametersMm.map((diameter, diameterIndex) => (
+                        {[
+                          ...record.diametersMm,
+                          ...(record.diametersMm.length < 10 ? [null] : []),
+                        ].map((diameter, diameterIndex) => (
                           <label key={diameterIndex}>
                             <span>玉{diameterIndex + 1}</span>
-                            <input data-entry-field="true" type="number" inputMode="decimal" step="0.1" value={diameter} onKeyDown={focusNextField} onChange={(event) => updateDiameter(index, diameterIndex, event.target.value)} aria-label={`玉${diameterIndex + 1}の横径`} />
+                            <input data-entry-field="true" type="number" inputMode="decimal" min="0.1" step="0.1" value={diameter ?? ""} onKeyDown={focusNextField} onChange={(event) => updateDiameter(index, diameterIndex, event.target.value)} aria-label={`玉${diameterIndex + 1}の横径`} />
                           </label>
                         ))}
                       </div>

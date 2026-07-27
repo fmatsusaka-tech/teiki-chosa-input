@@ -191,17 +191,17 @@ describe("parseSurveyMemo", () => {
     });
   });
 
-  it("横径数の不足と不自然な負数を警告する", () => {
+  it("横径が1個以上あれば個数を警告せず、不自然な負数だけ警告する", () => {
     const result = parseSurveyMemo(memo);
     const shimomachi = result.records.find((record) => record.orchard === "下町");
     const tokuda = result.records.find((record) => record.orchard === "徳田");
 
-    expect(shimomachi?.warnings).toContain("横径が4個です");
+    expect(shimomachi?.warnings).not.toContain("横径が4個です");
     expect(tokuda?.diametersMm).toEqual([73.4, 68.1, 64.2, 54.3]);
     expect(tokuda?.warnings.some((warning) => warning.includes("-681"))).toBe(true);
   });
 
-  it("糖度と酸度が無い入力では横径を削らず未入力警告を付ける", () => {
+  it("糖度と酸度が無い入力では横径を削らず糖度だけ未入力警告を付ける", () => {
     const result = parseSurveyMemo(incompleteMemo, "2026-07-18T07:00:00.000Z");
 
     expect(result.records).toHaveLength(9);
@@ -214,7 +214,7 @@ describe("parseSurveyMemo", () => {
       measuredAt: "2026-11-16T00:00:00.000Z",
     });
     expect(result.records[0].warnings).toContain("糖度が未入力です");
-    expect(result.records[0].warnings).toContain("酸度が未入力です");
+    expect(result.records[0].warnings).not.toContain("酸度が未入力です");
 
     expect(result.records[1]).toMatchObject({
       orchard: "有中",
