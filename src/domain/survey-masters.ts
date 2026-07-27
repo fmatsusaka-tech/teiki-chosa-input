@@ -31,6 +31,15 @@ export const orchardMasters: readonly SurveyMasterItem[] = [
 
 export const varietyMasters: readonly SurveyMasterItem[] = [
   { id: "yura-wase", canonicalName: "ゆら早生", aliases: [], isActive: true },
+  { id: "okitsu-wase", canonicalName: "興津早生", aliases: [], isActive: true },
+  { id: "taguchi-wase", canonicalName: "田口早生", aliases: [], isActive: true },
+  { id: "mukoyama", canonicalName: "向山", aliases: [], isActive: true },
+  { id: "hayashi", canonicalName: "林", aliases: [], isActive: true },
+  { id: "nyu", canonicalName: "丹生", aliases: [], isActive: true },
+  { id: "setoka", canonicalName: "せとか", aliases: [], isActive: true },
+  { id: "kiyomi", canonicalName: "清見", aliases: [], isActive: true },
+  { id: "yn26", canonicalName: "YN26", aliases: [], isActive: true },
+  { id: "goku-wase", canonicalName: "極早生", aliases: [], isActive: true },
   {
     id: "wase",
     canonicalName: WASE_VARIETY_NAME,
