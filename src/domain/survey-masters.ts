@@ -13,6 +13,7 @@ export type SurveyMasterCatalog = {
 };
 
 export const WASE_VARIETY_NAME = "早生（宮川・興津 等、又は山下紅）";
+export const BANSEI_VARIETY_NAME = "晩生（林など）";
 
 export const orchardMasters: readonly SurveyMasterItem[] = [
   { id: "arinaka", canonicalName: "有中", aliases: [], isActive: true },
@@ -30,23 +31,40 @@ export const orchardMasters: readonly SurveyMasterItem[] = [
 ];
 
 export const varietyMasters: readonly SurveyMasterItem[] = [
-  { id: "yura-wase", canonicalName: "ゆら早生", aliases: [], isActive: true },
-  { id: "okitsu-wase", canonicalName: "興津早生", aliases: [], isActive: true },
-  { id: "taguchi-wase", canonicalName: "田口早生", aliases: [], isActive: true },
-  { id: "mukoyama", canonicalName: "向山", aliases: [], isActive: true },
-  { id: "hayashi", canonicalName: "林", aliases: [], isActive: true },
-  { id: "nyu", canonicalName: "丹生", aliases: [], isActive: true },
-  { id: "setoka", canonicalName: "せとか", aliases: [], isActive: true },
-  { id: "kiyomi", canonicalName: "清見", aliases: [], isActive: true },
-  { id: "yn26", canonicalName: "YN26", aliases: [], isActive: true },
-  { id: "goku-wase", canonicalName: "極早生", aliases: [], isActive: true },
   {
     id: "wase",
     canonicalName: WASE_VARIETY_NAME,
-    aliases: ["早生", "宮川", "興津", "山下紅", "早生（宮川・興津など）"],
+    aliases: [
+      "早生",
+      "宮川",
+      "興津",
+      "興津早生",
+      "山下紅",
+      "早生（宮川・興津など）",
+    ],
     isActive: true,
   },
-  { id: "taguchi", canonicalName: "田口", aliases: [], isActive: true },
+  {
+    id: "taguchi",
+    canonicalName: "田口",
+    aliases: ["田口早生"],
+    isActive: true,
+  },
+  { id: "goku-wase", canonicalName: "極早生", aliases: [], isActive: true },
+  { id: "yura-wase", canonicalName: "ゆら早生", aliases: ["ゆら"], isActive: true },
+  { id: "yn26", canonicalName: "YN26", aliases: [], isActive: true },
+  { id: "mukoyama", canonicalName: "向山", aliases: [], isActive: true },
+  {
+    id: "bansei",
+    canonicalName: BANSEI_VARIETY_NAME,
+    aliases: ["林", "晩生"],
+    isActive: true,
+  },
+  { id: "nyu", canonicalName: "丹生", aliases: [], isActive: true },
+  { id: "kiyomi", canonicalName: "清見", aliases: [], isActive: true },
+  { id: "setoka", canonicalName: "せとか", aliases: [], isActive: true },
+  { id: "ponkan", canonicalName: "ポンカン", aliases: [], isActive: true },
+  { id: "dekopon", canonicalName: "不知火", aliases: [], isActive: true },
 ];
 
 export const orchardVarietyDefaults: Readonly<Record<string, string>> = {

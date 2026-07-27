@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  BANSEI_VARIETY_NAME,
   getActiveMasterNames,
   type SurveyMasterItem,
   varietyMasters,
+  WASE_VARIETY_NAME,
 } from "./survey-masters";
 
 describe("getActiveMasterNames", () => {
@@ -31,20 +33,20 @@ describe("getActiveMasterNames", () => {
     expect(getActiveMasterNames(items)).toEqual(["既存品種", "新品種"]);
   });
 
-  it("算出基礎と追加指定の品種を既定候補として網羅する", () => {
-    expect(getActiveMasterNames(varietyMasters)).toEqual(
-      expect.arrayContaining([
-        "ゆら早生",
-        "興津早生",
-        "田口早生",
-        "向山",
-        "林",
-        "丹生",
-        "せとか",
-        "清見",
-        "YN26",
-        "極早生",
-      ]),
-    );
+  it("正式な品種候補を指定順で返す", () => {
+    expect(getActiveMasterNames(varietyMasters)).toEqual([
+      WASE_VARIETY_NAME,
+      "田口",
+      "極早生",
+      "ゆら早生",
+      "YN26",
+      "向山",
+      BANSEI_VARIETY_NAME,
+      "丹生",
+      "清見",
+      "せとか",
+      "ポンカン",
+      "不知火",
+    ]);
   });
 });

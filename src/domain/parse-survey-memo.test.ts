@@ -379,7 +379,7 @@ describe("parseSurveyMemo", () => {
     });
   });
 
-  it.each(["宮川", "興津", "山下紅", "早生"])(
+  it.each(["宮川", "興津", "興津早生", "山下紅", "早生"])(
     "品種名%sを早生の正式品種名へ正規化する",
     (varietyAlias) => {
       const result = parseSurveyMemo(`徳田
@@ -396,4 +396,22 @@ ${varietyAlias}
       expect(result.records[0].variety).toBe(WASE_VARIETY_NAME);
     },
   );
+
+  it.each([
+    ["田口早生", "田口"],
+    ["林", "晩生（林など）"],
+  ])("品種名%sを正式品種名%sへ正規化する", (varietyAlias, expected) => {
+    const result = parseSurveyMemo(`徳田
+${varietyAlias}
+40
+41
+42
+43
+44
+10.5
+1.0`);
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0].variety).toBe(expected);
+  });
 });
