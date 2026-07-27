@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseSurveyMemo } from "./parse-survey-memo";
+import { WASE_VARIETY_NAME } from "./survey-masters";
 
 const memo = `2025/11/16
 
@@ -186,7 +187,7 @@ describe("parseSurveyMemo", () => {
 
     expect(result.records[5]).toMatchObject({
       orchard: "なる2",
-      variety: "早生",
+      variety: WASE_VARIETY_NAME,
       diametersMm: [74.2, 72.4, 82.5, 71.5, 76.3, 80],
     });
   });
@@ -377,4 +378,22 @@ describe("parseSurveyMemo", () => {
       diametersMm: [41, 42, 10.5],
     });
   });
+
+  it.each(["宮川", "興津", "山下紅", "早生"])(
+    "品種名%sを早生の正式品種名へ正規化する",
+    (varietyAlias) => {
+      const result = parseSurveyMemo(`徳田
+${varietyAlias}
+40
+41
+42
+43
+44
+10.5
+1.0`);
+
+      expect(result.records).toHaveLength(1);
+      expect(result.records[0].variety).toBe(WASE_VARIETY_NAME);
+    },
+  );
 });
