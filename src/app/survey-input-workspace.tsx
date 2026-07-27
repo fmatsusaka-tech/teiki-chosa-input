@@ -24,6 +24,7 @@ import {
   resolveVarietyOption,
 } from "../domain/variety-input";
 import { registerSurveyRecords } from "../lib/register-survey-records";
+import { recordRowKey } from "./record-row-key";
 
 function average(values: number[]): number | null {
   if (values.length === 0) return null;
@@ -443,7 +444,7 @@ export function SurveyInputWorkspace() {
               return (
                 <article
                   className={`record-row ${warnings.length > 0 ? "has-warning" : ""}`}
-                  key={`${record.orchard}-${record.notes}-${index}`}
+                  key={recordRowKey(index)}
                   role="listitem"
                 >
                   <div className="record-summary">
