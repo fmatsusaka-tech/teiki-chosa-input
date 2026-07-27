@@ -60,7 +60,11 @@ export function OcrReviewForm({ initialCandidates, orchardNames, varietyNames }:
         <span>{candidates.length}件</span>
       </div>
       {candidates.map((candidate, index) => {
-        const diameterValues = [...(candidate.diametersMm?.map(String) ?? []), ""];
+        const currentDiameters = candidate.diametersMm?.map(String) ?? [];
+        const diameterValues = [
+          ...currentDiameters,
+          ...(currentDiameters.length < 10 ? [""] : []),
+        ];
         return (
           <fieldset className="review-candidate" key={index}>
             <legend>候補 {index + 1}</legend>
@@ -94,13 +98,18 @@ export function OcrReviewForm({ initialCandidates, orchardNames, varietyNames }:
                 {errors[index].variety && <small>{errors[index].variety}</small>}
               </label>
               <label><span>処理区</span><input value={candidate.treatment ?? ""} onChange={(event) => update(index, "treatment", event.target.value || null)} /></label>
-              <label><span>糖度</span><input type="number" min="0" step="0.1" inputMode="decimal" value={candidate.brix ?? ""} onChange={(event) => update(index, "brix", parseOptionalNumber(event.target.value))} /></label>
-              <label><span>酸度</span><input type="number" min="0" step="0.01" inputMode="decimal" value={candidate.acidity ?? ""} onChange={(event) => update(index, "acidity", parseOptionalNumber(event.target.value))} /></label>
+              <label className={errors[index].brix ? "field-error" : ""}>
+                <span>糖度 <b>必須</b></span>
+                <input type="number" min="0" step="0.1" inputMode="decimal" value={candidate.brix ?? ""} aria-invalid={Boolean(errors[index].brix)} onChange={(event) => update(index, "brix", parseOptionalNumber(event.target.value))} />
+                {errors[index].brix && <small>{errors[index].brix}</small>}
+              </label>
+              <label><span>酸度（任意）</span><input type="number" min="0" step="0.01" inputMode="decimal" value={candidate.acidity ?? ""} onChange={(event) => update(index, "acidity", parseOptionalNumber(event.target.value))} /></label>
               <label className="review-wide"><span>備考</span><textarea rows={2} value={candidate.notes ?? ""} onChange={(event) => update(index, "notes", event.target.value || null)} /></label>
             </div>
-            <div className="review-diameters">
-              <span>横径（mm）</span>
+            <div className={`review-diameters ${errors[index].diametersMm ? "field-error" : ""}`}>
+              <span>横径（mm） <b>1個以上必須</b></span>
               <div>{diameterValues.map((value, diameterIndex) => <input key={diameterIndex} aria-label={`候補${index + 1} 横径${diameterIndex + 1}`} type="number" min="0.1" step="0.1" inputMode="decimal" value={value} onChange={(event) => { const values = [...diameterValues]; values[diameterIndex] = event.target.value; update(index, "diametersMm", parseOptionalDiameters(values)); }} />)}</div>
+              {errors[index].diametersMm && <small>{errors[index].diametersMm}</small>}
               <small>末尾の空欄へ入力すると、次の入力欄が追加されます。</small>
             </div>
             {candidate.unparsedText.length > 0 && <details><summary>判別できなかった文字を確認</summary><pre>{candidate.unparsedText.join("\n")}</pre></details>}

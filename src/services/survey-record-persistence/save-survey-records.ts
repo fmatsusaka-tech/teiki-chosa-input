@@ -19,6 +19,16 @@ export async function saveSurveyRecords(
         { cause: result.error },
       );
     }
+    if (
+      result.data.diametersMm.length === 0 ||
+      result.data.diametersMm.length > 10 ||
+      result.data.brix === null
+    ) {
+      throw new SurveyRecordPersistenceError(
+        "INVALID_RECORDS",
+        `${index + 1}件目は横径を1〜10個、糖度を入力してください。`,
+      );
+    }
     return result.data;
   });
 

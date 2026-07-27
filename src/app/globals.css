@@ -152,6 +152,8 @@ button:disabled { cursor: not-allowed; background: #dfe5df; color: #7d887f; }
 .review-fields b { color: #8a5200; font-size: .72rem; }
 .review-fields small { color: #a13f20; }
 .review-fields .field-error input, .review-fields .field-error select { border-color: #bd5739; background: #fff8f5; }
+.review-diameters.field-error input { border-color: #bd5739; background: #fff8f5; }
+.review-diameters.field-error small:first-of-type { color: #a13f20; }
 .review-wide { grid-column: 1 / -1; }
 .review-diameters { display: grid; gap: 8px; margin-top: 16px; font-size: .82rem; font-weight: 700; }
 .review-diameters > div { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 8px; }

@@ -107,7 +107,7 @@ export function parseSurveyMemo(
     const brix = sugarAcidPresent ? Number(numericLines.at(-2)) : null;
     const acidity = sugarAcidPresent ? Number(numericLines.at(-1)) : null;
     const diameterTokens = sugarAcidPresent ? numericLines.slice(0, -2) : numericLines;
-    const diametersMm = diameterTokens.map((token) => {
+    const diametersMm = diameterTokens.slice(0, 10).map((token) => {
       const parsed = parseDiameter(token);
       if (parsed.warning) warnings.push(parsed.warning);
       return parsed.value;
@@ -119,9 +119,9 @@ export function parseSurveyMemo(
       warnings.push("園地マスタ未登録です。園地名と品種を確認してください");
     }
     if (variety === "未設定") warnings.push("品種を特定できませんでした");
-    if (diametersMm.length < 5) warnings.push(`横径が${diametersMm.length}個です`);
+    if (diametersMm.length === 0) warnings.push("横径が未入力です");
+    if (diameterTokens.length > 10) warnings.push("横径は先頭10個を候補にしました");
     if (brix === null) warnings.push("糖度が未入力です");
-    if (acidity === null) warnings.push("酸度が未入力です");
 
     const notes = [currentTreatment, ...currentNotes].filter(Boolean).join("・");
 
