@@ -26,6 +26,8 @@
 | `GOOGLE_SHEETS_SPREADSHEET_ID` | 開発用スプレッドシートID |
 | `GOOGLE_SERVICE_ACCOUNT_EMAIL` | Googleサービスアカウントのメール |
 | `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` | Googleサービスアカウントの秘密鍵 |
+| `PADDLE_OCR_ENDPOINT` | 自宅PC OCR TunnelのHTTPS URL |
+| `PADDLE_OCR_TOKEN` | PC側と共有するOCR専用秘密トークン |
 
 秘密鍵は`.env.local`の値と同じく、BEGIN/END行を含む全文を設定します。これらの値は
 GitHub、Issue、PR、チャット、スクリーンショットへ貼り付けません。

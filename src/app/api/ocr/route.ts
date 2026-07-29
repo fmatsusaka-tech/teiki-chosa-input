@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createOcrProvider, normalizeOcrError } from "../../../services/ocr";
+import { createOcrProvider, normalizeOcrError, ocrUserMessage } from "../../../services/ocr";
 import { validateOcrImage } from "../../../services/ocr/image-input-validation";
 import { RuleBasedOcrParser } from "../../../services/ocr-parser";
 
@@ -23,6 +23,9 @@ export async function POST(request: Request) {
     return NextResponse.json(parsed);
   } catch (error) {
     const normalized = normalizeOcrError(error);
-    return NextResponse.json({ error: `OCRに失敗しました。${normalized.message}` }, { status: normalized.code === "INVALID_INPUT" ? 400 : 503 });
+    return NextResponse.json(
+      { error: ocrUserMessage(normalized), code: normalized.code },
+      { status: normalized.code === "INVALID_INPUT" ? 400 : 503 },
+    );
   }
 }

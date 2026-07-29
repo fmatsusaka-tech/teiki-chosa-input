@@ -19,6 +19,12 @@ services:
       - key: GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY
         sync: false
       - key: OCR_MODE
-        value: local
+        value: economy
       - key: OCR_PROVIDER
-        value: local
+        value: paddle
+      - key: PADDLE_OCR_ENDPOINT
+        sync: false
+      - key: PADDLE_OCR_TOKEN
+        sync: false
+      - key: PADDLE_OCR_TIMEOUT_MS
+        value: "30000"
