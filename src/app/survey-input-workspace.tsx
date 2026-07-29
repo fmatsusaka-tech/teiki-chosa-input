@@ -393,7 +393,7 @@ export function SurveyInputWorkspace() {
         )}
 
         {ocrStatus.kind === "error" && (
-          <div className="issue-summary" role="alert"><span>{ocrStatus.message}画像を選び直して再試行できます。</span></div>
+          <div className="issue-summary" role="alert"><span>{ocrStatus.message}</span></div>
         )}
 
         {registrationStatus.kind === "success" && (

@@ -15,6 +15,8 @@ PaddleOCRはPythonサイドカーとして実行し、TypeScript側のProvider�
 | `PADDLE_OCR_ENDPOINT` | URL | `http://127.0.0.1:8765` | PaddleOCRサイドカーの接続先。 |
 | `PADDLE_OCR_TIMEOUT_MS` | 正の整数 | `30000` | ヘルスチェック・認識要求のタイムアウト（ミリ秒）。 |
 | `PADDLE_OCR_LANG` | PaddleOCR言語名 | `japan` | Pythonサイドカーが読み込む言語モデル。 |
+| `PADDLE_OCR_TOKEN` | 秘密文字列 | なし | InputからOCRゲートウェイへ送るBearerトークン。 |
+| `OCR_GATEWAY_TOKEN` | 秘密文字列 | なし | PC側OCRゲートウェイが照合する同一トークン。 |
 
 ## 動作モード
 
@@ -35,6 +37,8 @@ PaddleOCRサイドカーが利用不能な場合は次のように扱う。
 - `checkAvailability()` は `available: false` と `PROVIDER_UNAVAILABLE` を返す。
 - `recognize()` はProvider固有例外を共通の`OcrProviderError`へ変換する。
 - Providerの生成だけではアプリ全体を起動不能にしない。
+- リモート接続先はHTTPSだけを許可する。
+- トークン未設定・不正認証時もOCRだけを利用不能とし、文章入力と登録は継続する。
 
 ## 開発者向け利用例
 
@@ -68,6 +72,8 @@ Invoke-RestMethod http://127.0.0.1:8765/health
 ```
 
 CPU版を標準とし、GPU版PaddlePaddleへの置換は利用環境に合わせてPaddlePaddle公式手順を確認する。サイドカーは画像から文字・信頼度・座標を返すだけで、JA固有解析や調査データ保存は行わない。
+
+リモート接続のTunnel設定、起動・停止、トークン更新は [自宅PC OCRゲートウェイ運用手順](remote-ocr-gateway.md) を参照する。
 
 ## 後続PRで実装すること
 

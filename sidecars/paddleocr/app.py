@@ -1,16 +1,28 @@
 import base64
 import binascii
 import os
+import secrets
 import tempfile
 import time
-from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
-app = FastAPI(title="PaddleOCR sidecar")
+app = FastAPI(
+    title="PaddleOCR sidecar",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
 _ocr: Any | None = None
+SUPPORTED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+IMAGE_SUFFIX_BY_TYPE = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+}
+MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
 
 class OcrRequest(BaseModel):
@@ -28,23 +40,39 @@ def get_ocr() -> Any:
     return _ocr
 
 
-@app.get("/health")
+def require_gateway_token(
+    authorization: Annotated[str | None, Header()] = None,
+) -> None:
+    expected_token = os.getenv("OCR_GATEWAY_TOKEN", "").strip()
+    if not expected_token:
+        raise HTTPException(status_code=503, detail="OCR gateway is not configured")
+    scheme, _, supplied_token = (authorization or "").partition(" ")
+    if scheme.lower() != "bearer" or not secrets.compare_digest(
+        supplied_token,
+        expected_token,
+    ):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+@app.get("/health", dependencies=[Depends(require_gateway_token)])
 def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.post("/ocr")
+@app.post("/ocr", dependencies=[Depends(require_gateway_token)])
 def recognize(request: OcrRequest) -> dict[str, Any]:
-    if not request.mimeType.startswith("image/"):
-        raise HTTPException(status_code=400, detail="mimeType must be an image type")
+    if request.mimeType not in SUPPORTED_IMAGE_TYPES:
+        raise HTTPException(status_code=400, detail="unsupported image type")
     try:
         image = base64.b64decode(request.imageBase64, validate=True)
     except (ValueError, binascii.Error) as error:
         raise HTTPException(status_code=400, detail="imageBase64 is invalid") from error
     if not image:
         raise HTTPException(status_code=400, detail="image is empty")
+    if len(image) > MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail="image exceeds 10MB")
 
-    suffix = Path(request.fileName or "image.png").suffix or ".png"
+    suffix = IMAGE_SUFFIX_BY_TYPE[request.mimeType]
     started = time.perf_counter()
     try:
         with tempfile.NamedTemporaryFile(suffix=suffix) as image_file:

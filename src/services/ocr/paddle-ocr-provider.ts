@@ -26,23 +26,43 @@ const sidecarResponseSchema = z.object({
 
 type Fetch = typeof fetch;
 
+function isLoopbackEndpoint(endpoint: URL): boolean {
+  return ["127.0.0.1", "localhost", "::1", "[::1]"].includes(endpoint.hostname);
+}
+
 export class PaddleOcrProvider implements OcrProvider {
   readonly name = "paddle" as const;
   private readonly endpoint: string;
   private readonly timeoutMs: number;
   private readonly mode: OcrMode;
   private readonly fetch: Fetch;
+  private readonly token?: string;
+  private readonly configurationError?: string;
 
-  constructor(params: { endpoint: string; timeoutMs: number; mode: OcrMode; fetch?: Fetch }) {
+  constructor(params: {
+    endpoint: string;
+    timeoutMs: number;
+    mode: OcrMode;
+    fetch?: Fetch;
+    token?: string;
+  }) {
     this.endpoint = params.endpoint.replace(/\/$/, "");
     this.timeoutMs = params.timeoutMs;
     this.mode = params.mode;
     this.fetch = params.fetch ?? fetch;
+    this.token = params.token?.trim() || undefined;
+    const endpoint = new URL(this.endpoint);
+    if (!isLoopbackEndpoint(endpoint) && endpoint.protocol !== "https:") {
+      this.configurationError = "Remote PaddleOCR endpoints must use HTTPS.";
+    } else if (!this.token) {
+      this.configurationError = "PADDLE_OCR_TOKEN is not configured.";
+    }
   }
 
   static fromEnvironment(mode: OcrMode, env: Record<string, string | undefined>): PaddleOcrProvider {
     const endpoint = env.PADDLE_OCR_ENDPOINT?.trim() || "http://127.0.0.1:8765";
     const timeoutValue = env.PADDLE_OCR_TIMEOUT_MS?.trim() || "30000";
+    const token = env.PADDLE_OCR_TOKEN?.trim();
     const timeoutMs = Number(timeoutValue);
     if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) {
       throw new OcrProviderError({
@@ -61,13 +81,13 @@ export class PaddleOcrProvider implements OcrProvider {
         cause,
       });
     }
-    return new PaddleOcrProvider({ endpoint, timeoutMs, mode });
+    return new PaddleOcrProvider({ endpoint, timeoutMs, mode, token });
   }
 
   async checkAvailability(): Promise<OcrAvailability> {
     try {
       const response = await this.request("/health", { method: "GET" });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) throw this.responseError(response.status);
       return { available: true };
     } catch (error) {
       return {
@@ -100,7 +120,7 @@ export class PaddleOcrProvider implements OcrProvider {
           fileName: input.fileName,
         }),
       });
-      if (!response.ok) throw new Error(`PaddleOCR sidecar returned HTTP ${response.status}`);
+      if (!response.ok) throw this.responseError(response.status);
       const payload = sidecarResponseSchema.parse(await response.json());
       const lines = payload.lines.map((line) => ({ ...line, metadata: {} }));
       const confidences = lines.flatMap((line) => line.confidence === null ? [] : [line.confidence]);
@@ -133,9 +153,41 @@ export class PaddleOcrProvider implements OcrProvider {
   }
 
   private request(path: string, init: RequestInit): Promise<Response> {
+    if (this.configurationError) {
+      throw new OcrProviderError({
+        code: "PROVIDER_UNAVAILABLE",
+        provider: "paddle",
+        message: this.configurationError,
+      });
+    }
+    const headers = new Headers(init.headers);
+    headers.set("authorization", `Bearer ${this.token}`);
     return this.fetch(`${this.endpoint}${path}`, {
       ...init,
+      headers,
       signal: AbortSignal.timeout(this.timeoutMs),
+    });
+  }
+
+  private responseError(status: number): OcrProviderError {
+    if (status === 401 || status === 403) {
+      return new OcrProviderError({
+        code: "PROVIDER_UNAVAILABLE",
+        provider: "paddle",
+        message: "PaddleOCR gateway authentication failed.",
+      });
+    }
+    if (status >= 500) {
+      return new OcrProviderError({
+        code: "PROVIDER_UNAVAILABLE",
+        provider: "paddle",
+        message: `PaddleOCR gateway is unavailable (HTTP ${status}).`,
+      });
+    }
+    return new OcrProviderError({
+      code: "PROVIDER_ERROR",
+      provider: "paddle",
+      message: `PaddleOCR gateway rejected the request (HTTP ${status}).`,
     });
   }
 }

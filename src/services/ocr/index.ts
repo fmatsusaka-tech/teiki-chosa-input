@@ -19,3 +19,4 @@ export type {
   OcrTextBlock,
 } from "./ocr-types";
 export { ocrResultSchema, ocrTextBlockSchema } from "./ocr-types";
+export { ocrUserMessage } from "./user-message";
