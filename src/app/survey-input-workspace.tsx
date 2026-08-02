@@ -23,6 +23,12 @@ import {
   CUSTOM_VARIETY_OPTION,
   resolveVarietyOption,
 } from "../domain/variety-input";
+import {
+  CUSTOM_TREATMENT_OPTION,
+  resolveTreatmentOption,
+  treatmentSuggestionsForOrchard,
+  type TreatmentSuggestionsByOrchard,
+} from "../domain/treatment-input";
 import { registerSurveyRecords } from "../lib/register-survey-records";
 import { recordRowKey } from "./record-row-key";
 
@@ -65,6 +71,8 @@ export function SurveyInputWorkspace() {
   const [masterCatalog, setMasterCatalog] = useState<SurveyMasterCatalog>(
     defaultSurveyMasterCatalog,
   );
+  const [treatmentSuggestionsByOrchard, setTreatmentSuggestionsByOrchard] =
+    useState<TreatmentSuggestionsByOrchard>({});
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const libraryInputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLElement>(null);
@@ -146,8 +154,14 @@ export function SurveyInputWorkspace() {
         if (!response.ok) throw new Error("master request failed");
         return response.json();
       })
-      .then((payload: { catalog?: SurveyMasterCatalog }) => {
+      .then((payload: {
+        catalog?: SurveyMasterCatalog;
+        treatmentSuggestionsByOrchard?: TreatmentSuggestionsByOrchard;
+      }) => {
         if (active && payload.catalog) setMasterCatalog(payload.catalog);
+        if (active && payload.treatmentSuggestionsByOrchard) {
+          setTreatmentSuggestionsByOrchard(payload.treatmentSuggestionsByOrchard);
+        }
       })
       .catch(() => {
         // The built-in catalog remains available when Google Sheets is unavailable.
@@ -440,6 +454,10 @@ export function SurveyInputWorkspace() {
               const isSelected = selectedRows.has(index);
               const mean = average(record.diametersMm);
               const warnings = visibleWarnings(record);
+              const treatmentSuggestions = treatmentSuggestionsForOrchard(
+                record.orchard,
+                treatmentSuggestionsByOrchard,
+              );
 
               return (
                 <article
@@ -521,7 +539,38 @@ export function SurveyInputWorkspace() {
                           <small>新品種は「自由入力」を選んで入力できます。</small>
                         </label>
                         <label>
-                          <span>処理区・備考</span>
+                          <span>処理区</span>
+                          <select
+                            data-entry-field="true"
+                            value={resolveTreatmentOption(record.treatment, treatmentSuggestions)}
+                            onKeyDown={focusNextField}
+                            onChange={(event) => {
+                              if (event.target.value === CUSTOM_TREATMENT_OPTION) {
+                                if (treatmentSuggestions.includes(record.treatment ?? "")) {
+                                  updateRecord(index, "treatment", null);
+                                }
+                                return;
+                              }
+                              updateRecord(index, "treatment", event.target.value);
+                            }}
+                          >
+                            {treatmentSuggestions.map((treatment) => (
+                              <option key={treatment} value={treatment}>{treatment}</option>
+                            ))}
+                            <option value={CUSTOM_TREATMENT_OPTION}>自由記入</option>
+                          </select>
+                          {resolveTreatmentOption(record.treatment, treatmentSuggestions) === CUSTOM_TREATMENT_OPTION && (
+                            <input
+                              data-entry-field="true"
+                              value={record.treatment ?? ""}
+                              placeholder="処理区を入力"
+                              onKeyDown={focusNextField}
+                              onChange={(event) => updateRecord(index, "treatment", event.target.value || null)}
+                            />
+                          )}
+                        </label>
+                        <label>
+                          <span>備考</span>
                           <input data-entry-field="true" value={record.notes} onKeyDown={focusNextField} onChange={(event) => updateRecord(index, "notes", event.target.value)} />
                         </label>
                         <label className={record.brix === null ? "required-field" : ""}>

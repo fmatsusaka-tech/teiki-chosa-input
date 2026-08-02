@@ -17,7 +17,7 @@ Render: Next.js Inputアプリ
   ├─ POST /api/pilot-login  ログインCookie発行
   ├─ GET  /api/health       アプリ・OCR稼働確認
   ├─ POST /api/ocr          画像検証、OCR、項目解析
-  ├─ GET  /api/survey-masters 園地・品種候補取得
+  ├─ GET  /api/survey-masters 園地・品種候補、園地別の過去処理区候補を取得
   └─ POST /api/survey-records 確認済みデータ保存
           │                         │
           │ HTTPS + Bearer Token    │ Google Sheets API
@@ -58,6 +58,7 @@ Cloudflare Tunnel             Googleスプレッドシート
 | Input API | 確認済み入力、環境設定 | `調査原票`、補正ログ |
 | PaddleOCR | 送信された画像 | 永続データなし。一時ファイルのみ |
 | Google Sheets | `入力マスタ`、`調査原票`の見出し | Inputが`調査原票`へ追記 |
+| Input API | `調査データ`の`園地名`・`処理区` | 園地別処理区候補として返す。Spreadsheetは更新しない |
 | Output側 | `調査原票` | Input正本を更新しない |
 
 ## 障害時の分離
