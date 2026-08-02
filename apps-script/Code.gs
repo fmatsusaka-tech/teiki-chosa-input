@@ -3,6 +3,8 @@ const RAW_SHEET_NAME = "調査原票";
 const SURVEY_SHEET_NAME = "調査データ";
 const API_TOKEN_PROPERTY = "API_TOKEN";
 const MAX_DIAMETERS = 10;
+const ACTIVE_STATUS_HEADER = "有効状態";
+const ACTIVE_STATUS_VALUES = ["有効", "無効"];
 const CANONICAL_RAW_HEADERS = [
   "登録ID", "編集キーハッシュ", "登録日時", "更新日時", "改訂番号", "データ状態",
   "計測日", "園地名", "品種", "処理区", "備考",
@@ -171,20 +173,110 @@ function regenerateSurveyData() {
   if (!rawSheet || !surveySheet) throw new Error("調査原票または調査データが見つかりません。");
 
   const rawHeaders = getHeaders_(rawSheet);
-  const surveyHeaders = ensureDiameterOutputHeaders_(getHeaders_(surveySheet));
+  const existingSurveyHeaders = getHeaders_(surveySheet);
+  const activeStatusById = activeStatusByRegistrationId_(
+    existingSurveyHeaders,
+    surveySheet.getLastRow() < 2
+      ? []
+      : surveySheet.getRange(
+        2, 1, surveySheet.getLastRow() - 1, existingSurveyHeaders.length,
+      ).getValues(),
+  );
+  const surveyHeaders = ensureSurveyActiveStatusHeader_(
+    ensureDiameterOutputHeaders_(existingSurveyHeaders),
+  );
   surveySheet.getRange(1, 1, 1, surveyHeaders.length).setValues([surveyHeaders]);
 
   const rawRows = rawSheet.getLastRow() < 2
     ? []
     : rawSheet.getRange(2, 1, rawSheet.getLastRow() - 1, rawHeaders.length).getValues();
-  const outputRows = rawRows.map((row) => buildSurveyDataRow_(rawHeaders, row, surveyHeaders));
+  const outputRows = rawRows.map((row) => {
+    const outputRow = buildSurveyDataRow_(rawHeaders, row, surveyHeaders);
+    const registrationId = cleanText_(outputRow[surveyHeaders.indexOf("登録ID")]);
+    outputRow[surveyHeaders.indexOf(ACTIVE_STATUS_HEADER)] = activeStatusById.get(registrationId) ?? "";
+    return outputRow;
+  });
 
   const oldDataRows = Math.max(surveySheet.getLastRow() - 1, 0);
   if (oldDataRows > 0) surveySheet.getRange(2, 1, oldDataRows, surveySheet.getLastColumn()).clearContent();
   if (outputRows.length > 0) {
     surveySheet.getRange(2, 1, outputRows.length, surveyHeaders.length).setValues(outputRows);
   }
+  applySurveyActiveStatusValidation_(surveySheet, surveyHeaders);
   return outputRows.length;
+}
+
+/** Add the manual active-status column without changing existing header order. */
+function setupSurveyActiveStatusColumn() {
+  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SURVEY_SHEET_NAME);
+  if (!sheet) throw new Error(`シート「${SURVEY_SHEET_NAME}」が見つかりません。`);
+  const originalHeaders = getHeaders_(sheet);
+  const duplicates = originalHeaders.filter(
+    (header, index) => header === ACTIVE_STATUS_HEADER && originalHeaders.indexOf(header) !== index,
+  );
+  if (duplicates.length > 0) throw new Error(`調査データの「${ACTIVE_STATUS_HEADER}」見出しが重複しています。`);
+  const headers = ensureSurveyActiveStatusHeader_(originalHeaders);
+  if (!originalHeaders.includes(ACTIVE_STATUS_HEADER)) {
+    sheet.getRange(1, headers.indexOf(ACTIVE_STATUS_HEADER) + 1).setValue(ACTIVE_STATUS_HEADER);
+  }
+  applySurveyActiveStatusValidation_(sheet, headers);
+  return summarizeSurveyActiveStatuses_(headers, sheet.getLastRow() < 2
+    ? []
+    : sheet.getRange(2, 1, sheet.getLastRow() - 1, headers.length).getValues());
+}
+
+function ensureSurveyActiveStatusHeader_(headers) {
+  return headers.includes(ACTIVE_STATUS_HEADER) ? [...headers] : [...headers, ACTIVE_STATUS_HEADER];
+}
+
+function applySurveyActiveStatusValidation_(sheet, headers) {
+  const column = headers.indexOf(ACTIVE_STATUS_HEADER) + 1;
+  if (column <= 0) throw new Error(`調査データに「${ACTIVE_STATUS_HEADER}」見出しがありません。`);
+  const rule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(ACTIVE_STATUS_VALUES, true)
+    .setAllowInvalid(false)
+    .build();
+  sheet.getRange(2, column, Math.max(sheet.getMaxRows() - 1, 1), 1).setDataValidation(rule);
+}
+
+function parseActiveStatus_(value) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return ACTIVE_STATUS_VALUES.includes(normalized) ? normalized : null;
+}
+
+function isSurveyRowAdopted_(headers, row, acceptedDataStatuses) {
+  const activeIndex = headers.indexOf(ACTIVE_STATUS_HEADER);
+  const dataStatusIndex = headers.indexOf("データ状態");
+  if (activeIndex < 0 || dataStatusIndex < 0) return false;
+  if (parseActiveStatus_(row[activeIndex]) !== "有効") return false;
+  const dataStatus = cleanText_(row[dataStatusIndex]);
+  return Array.isArray(acceptedDataStatuses) && acceptedDataStatuses.includes(dataStatus);
+}
+
+function activeStatusByRegistrationId_(headers, rows) {
+  const idIndex = headers.indexOf("登録ID");
+  const statusIndex = headers.indexOf(ACTIVE_STATUS_HEADER);
+  const result = new Map();
+  if (idIndex < 0 || statusIndex < 0) return result;
+  rows.forEach((row) => {
+    const id = cleanText_(row[idIndex]);
+    if (id) result.set(id, row[statusIndex]);
+  });
+  return result;
+}
+
+function summarizeSurveyActiveStatuses_(headers, rows) {
+  const statusIndex = headers.indexOf(ACTIVE_STATUS_HEADER);
+  const summary = { totalRows: rows.length, active: 0, inactive: 0, blank: 0, unknown: 0 };
+  rows.forEach((row) => {
+    const value = statusIndex < 0 ? "" : row[statusIndex];
+    if (value === "" || value === null || value === undefined) summary.blank += 1;
+    else if (parseActiveStatus_(value) === "有効") summary.active += 1;
+    else if (parseActiveStatus_(value) === "無効") summary.inactive += 1;
+    else summary.unknown += 1;
+  });
+  return summary;
 }
 
 function ensureDiameterOutputHeaders_(headers) {
