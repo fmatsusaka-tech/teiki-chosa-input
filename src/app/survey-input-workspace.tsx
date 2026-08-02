@@ -10,6 +10,11 @@ import {
 } from "react";
 import { parseSurveyMemo } from "../domain/parse-survey-memo";
 import {
+  analysisResultFeedback,
+  emptyAnalysisFeedback,
+  type AnalysisFeedback,
+} from "../domain/analysis-feedback";
+import {
   applySurveyDate,
   formatLocalSurveyDate,
 } from "../domain/survey-date";
@@ -58,6 +63,10 @@ export function SurveyInputWorkspace() {
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [photoNames, setPhotoNames] = useState<string[]>([]);
   const [ocrStatus, setOcrStatus] = useState<RegistrationStatus>({ kind: "idle", message: "" });
+  const [analysisStatus, setAnalysisStatus] = useState<AnalysisFeedback>({
+    kind: "idle",
+    message: "",
+  });
   const [registrationStatus, setRegistrationStatus] = useState<RegistrationStatus>({
     kind: "idle",
     message: "",
@@ -111,7 +120,7 @@ export function SurveyInputWorkspace() {
       setSelectedRows(new Set());
       setExpandedRows(new Set());
       hasAnalyzedRef.current = false;
-      return;
+      return 0;
     }
 
     const parsed = parseSurveyMemo(text, new Date().toISOString(), masterCatalog);
@@ -137,6 +146,26 @@ export function SurveyInputWorkspace() {
         resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
       );
     }
+    return datedRecords.length;
+  };
+
+  const handleManualAnalysis = () => {
+    if (analysisStatus.kind === "loading") return;
+    if (!sourceText.trim()) {
+      setAnalysisStatus(emptyAnalysisFeedback());
+      return;
+    }
+    setAnalysisStatus({ kind: "loading", message: "解析しています…" });
+    window.setTimeout(() => {
+      try {
+        setAnalysisStatus(analysisResultFeedback(analyzeText(sourceText)));
+      } catch {
+        setAnalysisStatus({
+          kind: "error",
+          message: "解析中に問題が発生しました。もう一度お試しください。",
+        });
+      }
+    }, 0);
   };
 
   useEffect(() => {
@@ -188,6 +217,7 @@ export function SurveyInputWorkspace() {
     value: SurveyRecord[K],
   ) => {
     setRegistrationStatus({ kind: "idle", message: "" });
+    setAnalysisStatus({ kind: "idle", message: "" });
     setRecords((current) =>
       current.map((record, recordIndex) =>
         recordIndex === index ? { ...record, [field]: value } : record,
@@ -253,6 +283,7 @@ export function SurveyInputWorkspace() {
     setExpandedRows(new Set());
     setPhotoNames([]);
     setRegistrationStatus({ kind: "idle", message: "" });
+    setAnalysisStatus({ kind: "idle", message: "" });
     hasAnalyzedRef.current = false;
   };
 
@@ -358,6 +389,13 @@ export function SurveyInputWorkspace() {
         />
 
         <div className="input-actions">
+          <button
+            type="button"
+            disabled={analysisStatus.kind === "loading"}
+            onClick={handleManualAnalysis}
+          >
+            {analysisStatus.kind === "loading" ? "解析しています…" : "解析を開始"}
+          </button>
           <button type="button" onClick={() => cameraInputRef.current?.click()}>
             その場で撮影
           </button>
@@ -368,6 +406,16 @@ export function SurveyInputWorkspace() {
             入力を消す
           </button>
         </div>
+
+        {analysisStatus.kind !== "idle" && (
+          <div
+            className={analysisStatus.kind === "error" ? "issue-summary" : "temporary-photo-note"}
+            role={analysisStatus.kind === "error" ? "alert" : "status"}
+            aria-live="polite"
+          >
+            <span>{analysisStatus.message}</span>
+          </div>
+        )}
 
         <input
           ref={cameraInputRef}
