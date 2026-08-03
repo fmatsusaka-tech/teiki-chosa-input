@@ -1,8 +1,11 @@
 const SPREADSHEET_ID = "1Ix7qFigeUvmxkEl3C51rmzuBzYDq7OR_ZGHq6GUKa0g";
 const RAW_SHEET_NAME = "調査原票";
 const SURVEY_SHEET_NAME = "調査データ";
+const INPUT_MASTER_SHEET_NAME = "入力マスタ";
 const API_TOKEN_PROPERTY = "API_TOKEN";
 const MAX_DIAMETERS = 10;
+const INPUT_MASTER_HEADERS = ["種別", "正式名称", "別名", "既定品種", "既定品種2", "既定品種3", "有効"];
+const MAX_LINKED_VARIETIES = 3;
 const CANONICAL_RAW_HEADERS = [
   "登録ID", "編集キーハッシュ", "登録日時", "更新日時", "改訂番号", "データ状態",
   "計測日", "園地名", "品種", "処理区", "備考",
@@ -185,6 +188,181 @@ function regenerateSurveyData() {
     surveySheet.getRange(2, 1, outputRows.length, surveyHeaders.length).setValues(outputRows);
   }
   return outputRows.length;
+}
+
+/**
+ * 調査原票の園地名・処理区のうち入力マスタに未登録の値を「有効」で追加し、
+ * 園地ごとに観測された品種（既知の品種マスタに一致するもの）を既定品種1〜3の
+ * 空欄スロットへ紐づける。手動登録済みの行や既に埋まっている品種欄は上書きしない。
+ * 誤って追加された値は、入力マスタの「有効」チェックを外すことで無効化する。
+ */
+function syncInputMasterFromRawSheet() {
+  const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const rawSheet = spreadsheet.getSheetByName(RAW_SHEET_NAME);
+  const masterSheet = spreadsheet.getSheetByName(INPUT_MASTER_SHEET_NAME);
+  if (!rawSheet || !masterSheet) {
+    throw new Error("調査原票または入力マスタが見つかりません。");
+  }
+
+  const rawHeaders = getHeaders_(rawSheet);
+  const orchardIndex = rawHeaders.indexOf("園地名");
+  const varietyIndex = rawHeaders.indexOf("品種");
+  const treatmentIndex = rawHeaders.indexOf("処理区");
+  if (orchardIndex < 0 || varietyIndex < 0 || treatmentIndex < 0) {
+    throw new Error("調査原票に園地名・品種・処理区の見出しがありません。");
+  }
+  const rawRows = rawSheet.getLastRow() < 2
+    ? []
+    : rawSheet.getRange(2, 1, rawSheet.getLastRow() - 1, rawHeaders.length).getValues();
+
+  const masterHeaders = ensureInputMasterHeaders_(masterSheet);
+  const kindIndex = masterHeaders.indexOf("種別");
+  const nameIndex = masterHeaders.indexOf("正式名称");
+  const aliasIndex = masterHeaders.indexOf("別名");
+  const varietySlotIndexes = ["既定品種", "既定品種2", "既定品種3"].map(
+    (header) => masterHeaders.indexOf(header),
+  );
+
+  let masterRows = readSheetDataRows_(masterSheet, masterHeaders.length);
+  const knownOrchards = buildKnownNamesByKind_(masterRows, kindIndex, nameIndex, aliasIndex, "園地");
+  const knownTreatments = buildKnownNamesByKind_(masterRows, kindIndex, nameIndex, aliasIndex, "処理区");
+  const knownVarieties = buildKnownNamesByKind_(masterRows, kindIndex, nameIndex, aliasIndex, "品種");
+
+  const newOrchards = findUnknownNames_(collectDistinctInOrder_(rawRows, orchardIndex), knownOrchards);
+  const newTreatments = findUnknownNames_(collectDistinctInOrder_(rawRows, treatmentIndex), knownTreatments);
+
+  const newRows = [];
+  newOrchards.forEach((name) => {
+    newRows.push(rowForHeaders_({ 種別: "園地", 正式名称: name, 有効: true }, masterHeaders));
+  });
+  newTreatments.forEach((name) => {
+    newRows.push(rowForHeaders_({ 種別: "処理区", 正式名称: name, 有効: true }, masterHeaders));
+  });
+  if (newRows.length > 0) {
+    masterSheet.getRange(masterSheet.getLastRow() + 1, 1, newRows.length, masterHeaders.length).setValues(newRows);
+    masterRows = readSheetDataRows_(masterSheet, masterHeaders.length);
+  }
+
+  let linkedOrchards = 0;
+  if (varietySlotIndexes.every((index) => index >= 0)) {
+    const observations = buildOrchardVarietyObservations_(rawRows, orchardIndex, varietyIndex, knownVarieties);
+    masterRows.forEach((row, rowOffset) => {
+      if (cleanText_(row[kindIndex]) !== "園地") return;
+      const observed = observations[cleanText_(row[nameIndex])];
+      if (!observed || observed.length === 0) return;
+      const currentSlots = varietySlotIndexes.map((index) => row[index]);
+      const filledSlots = fillVarietySlots_(currentSlots, observed, MAX_LINKED_VARIETIES);
+      const changed = filledSlots.some(
+        (value, slotOffset) => cleanText_(value) !== cleanText_(currentSlots[slotOffset]),
+      );
+      if (!changed) return;
+      varietySlotIndexes.forEach((columnIndex, slotOffset) => {
+        masterSheet.getRange(rowOffset + 2, columnIndex + 1).setValue(filledSlots[slotOffset]);
+      });
+      linkedOrchards += 1;
+    });
+  }
+
+  return { addedRows: newRows.length, linkedOrchards: linkedOrchards };
+}
+
+/**
+ * 入力マスタ自動学習の時間主導トリガーを設定する。既存の同名トリガーは置き換える。
+ * 初回のみApps Scriptエディタから手動実行する。
+ */
+function createInputMasterSyncTrigger() {
+  ScriptApp.getProjectTriggers()
+    .filter((trigger) => trigger.getHandlerFunction() === "syncInputMasterFromRawSheet")
+    .forEach((trigger) => ScriptApp.deleteTrigger(trigger));
+  ScriptApp.newTrigger("syncInputMasterFromRawSheet")
+    .timeBased()
+    .everyMinutes(30)
+    .create();
+}
+
+/** Add missing input-master columns without moving, renaming, or deleting existing columns. */
+function ensureInputMasterHeaders_(sheet) {
+  const originalHeaders = getHeaders_(sheet);
+  const missingHeaders = INPUT_MASTER_HEADERS.filter((header) => !originalHeaders.includes(header));
+  if (missingHeaders.length > 0) {
+    const startColumn = Math.max(sheet.getLastColumn(), 0) + 1;
+    sheet.getRange(1, startColumn, 1, missingHeaders.length).setValues([missingHeaders]);
+  }
+  return getHeaders_(sheet);
+}
+
+function readSheetDataRows_(sheet, columnCount) {
+  const lastRow = sheet.getLastRow();
+  return lastRow < 2 ? [] : sheet.getRange(2, 1, lastRow - 1, columnCount).getValues();
+}
+
+function splitAliases_(value) {
+  return String(value == null ? "" : value)
+    .split(/[、,;\n]/)
+    .map((item) => cleanText_(item))
+    .filter(Boolean);
+}
+
+function buildKnownNamesByKind_(masterRows, kindIndex, nameIndex, aliasIndex, kind) {
+  const names = new Set();
+  masterRows.forEach((row) => {
+    if (cleanText_(row[kindIndex]) !== kind) return;
+    const canonical = cleanText_(row[nameIndex]);
+    if (canonical) names.add(canonical);
+    splitAliases_(row[aliasIndex]).forEach((alias) => names.add(alias));
+  });
+  return names;
+}
+
+function collectDistinctInOrder_(rows, columnIndex) {
+  const seen = new Set();
+  const values = [];
+  rows.forEach((row) => {
+    const value = cleanText_(row[columnIndex]);
+    if (!value || seen.has(value)) return;
+    seen.add(value);
+    values.push(value);
+  });
+  return values;
+}
+
+function findUnknownNames_(observedNames, knownNames) {
+  return observedNames.filter((name) => !knownNames.has(name));
+}
+
+/** 園地ごとに、既知の品種マスタに一致する品種を観測順（重複除去）で最大3件集める。 */
+function buildOrchardVarietyObservations_(rawRows, orchardIndex, varietyIndex, knownVarietyNames) {
+  const observations = {};
+  rawRows.forEach((row) => {
+    const orchard = cleanText_(row[orchardIndex]);
+    const variety = cleanText_(row[varietyIndex]);
+    if (!orchard || !variety || !knownVarietyNames.has(variety)) return;
+    if (!observations[orchard]) observations[orchard] = [];
+    if (observations[orchard].indexOf(variety) < 0) observations[orchard].push(variety);
+  });
+  return observations;
+}
+
+/**
+ * 既に埋まっているスロットは上書きせず、空欄スロットだけを観測順の品種で埋める。
+ * 4件目以降（スロット数を超える分）の品種は追加しない。
+ */
+function fillVarietySlots_(currentSlots, observedVarieties, maxSlots) {
+  const slots = currentSlots.slice(0, maxSlots);
+  while (slots.length < maxSlots) slots.push("");
+  const present = new Set(slots.map(cleanText_).filter((value) => value !== ""));
+  let cursor = 0;
+  for (let index = 0; index < slots.length; index += 1) {
+    if (cleanText_(slots[index]) !== "") continue;
+    while (cursor < observedVarieties.length && present.has(cleanText_(observedVarieties[cursor]))) {
+      cursor += 1;
+    }
+    if (cursor >= observedVarieties.length) break;
+    slots[index] = observedVarieties[cursor];
+    present.add(cleanText_(observedVarieties[cursor]));
+    cursor += 1;
+  }
+  return slots;
 }
 
 function ensureDiameterOutputHeaders_(headers) {
