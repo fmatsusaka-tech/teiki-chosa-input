@@ -49,6 +49,16 @@ Apps Scriptエディタから`setupCanonicalRawSheet`を1回実行してくだ�
 登録応答の`editCredentials`で一度だけ返し、Spreadsheetやログへ保存しません。正式な列仕様は
 [`docs/input-data-dictionary.md`](../docs/input-data-dictionary.md)を参照してください。
 
+## 入力マスタの自動学習
+
+`syncInputMasterFromRawSheet`は、`調査原票`の園地名・処理区のうち`入力マスタ`に
+無い値を`有効`チェック済みで追加し、園地ごとに観測された品種(品種マスタに一致する
+ものだけ)を`既定品種`・`既定品種2`・`既定品種3`の空欄スロットへ紐づけます。詳細な
+挙動は[`docs/input-master.md`](../docs/input-master.md)を参照してください。
+
+初回のみApps Scriptエディタから`createInputMasterSyncTrigger`を実行すると、
+30分ごとに`syncInputMasterFromRawSheet`を呼び出す時間主導トリガーが設定されます。
+
 ## 調査データの再生成
 
 Apps Scriptエディタから `regenerateSurveyData` を実行すると、`調査原票` の全行を

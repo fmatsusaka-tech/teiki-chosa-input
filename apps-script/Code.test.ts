@@ -12,13 +12,30 @@ type AppsScriptHelpers = {
   surveyDateParts_: (value: unknown) => { year: number; month: number; day: number } | null;
   validateCanonicalHeaders_: (headers: string[]) => string[];
   optionalNumber_: (value: unknown) => number | "";
+  splitAliases_: (value: unknown) => string[];
+  buildKnownNamesByKind_: (
+    masterRows: unknown[][],
+    kindIndex: number,
+    nameIndex: number,
+    aliasIndex: number,
+    kind: string,
+  ) => Set<string>;
+  collectDistinctInOrder_: (rows: unknown[][], columnIndex: number) => string[];
+  findUnknownNames_: (observedNames: string[], knownNames: Set<string>) => string[];
+  buildOrchardVarietyObservations_: (
+    rawRows: unknown[][],
+    orchardIndex: number,
+    varietyIndex: number,
+    knownVarietyNames: Set<string>,
+  ) => Record<string, string[]>;
+  fillVarietySlots_: (currentSlots: unknown[], observedVarieties: string[], maxSlots: number) => unknown[];
 };
 
 function loadHelpers(): AppsScriptHelpers {
   const source = readFileSync(new URL("./Code.gs", import.meta.url), "utf8");
   const context: Record<string, unknown> = {};
   vm.runInNewContext(
-    `${source}\nthis.helpers = { ensureDiameterOutputHeaders_, buildSurveyDataRow_, surveyDateParts_, validateCanonicalHeaders_, optionalNumber_ };`,
+    `${source}\nthis.helpers = { ensureDiameterOutputHeaders_, buildSurveyDataRow_, surveyDateParts_, validateCanonicalHeaders_, optionalNumber_, splitAliases_, buildKnownNamesByKind_, collectDistinctInOrder_, findUnknownNames_, buildOrchardVarietyObservations_, fillVarietySlots_ };`,
     context,
   );
   return context.helpers as AppsScriptHelpers;
@@ -26,7 +43,8 @@ function loadHelpers(): AppsScriptHelpers {
 
 const {
   ensureDiameterOutputHeaders_, buildSurveyDataRow_, surveyDateParts_,
-  validateCanonicalHeaders_, optionalNumber_,
+  validateCanonicalHeaders_, optionalNumber_, splitAliases_, buildKnownNamesByKind_,
+  collectDistinctInOrder_, findUnknownNames_, buildOrchardVarietyObservations_, fillVarietySlots_,
 } = loadHelpers();
 
 describe("調査データの横径変換", () => {
@@ -148,5 +166,86 @@ describe("Input正本契約", () => {
     expect(optionalNumber_("")).toBe("");
     expect(optionalNumber_(0)).toBe(0);
     expect(optionalNumber_("10.5")).toBe(10.5);
+  });
+});
+
+describe("入力マスタの自動学習", () => {
+  it("別名を読点・カンマ・セミコロン・改行で分割する", () => {
+    expect(splitAliases_("宮川、興津,山下紅;早生\n田口")).toEqual([
+      "宮川", "興津", "山下紅", "早生", "田口",
+    ]);
+    expect(splitAliases_("")).toEqual([]);
+    expect(splitAliases_(null)).toEqual([]);
+  });
+
+  it("種別ごとに正式名称と別名を既知集合として集める", () => {
+    const masterRows = [
+      ["園地", "徳田", "とくだ、徳田園", "早生", "", "", true],
+      ["処理区", "無処理区", "", "", "", "", true],
+      ["品種", "早生（宮川・興津 等、又は山下紅）", "宮川、興津、山下紅、早生", "", "", "", true],
+    ];
+    const orchards = buildKnownNamesByKind_(masterRows, 0, 1, 2, "園地");
+    expect(orchards.has("徳田")).toBe(true);
+    expect(orchards.has("とくだ")).toBe(true);
+    expect(orchards.has("徳田園")).toBe(true);
+    expect(orchards.has("無処理区")).toBe(false);
+
+    const varieties = buildKnownNamesByKind_(masterRows, 0, 1, 2, "品種");
+    expect(varieties.has("宮川")).toBe(true);
+    expect(varieties.has("早生（宮川・興津 等、又は山下紅）")).toBe(true);
+  });
+
+  it("重複と空欄を除いて観測順に園地名を集める", () => {
+    const rows = [["徳田"], ["下田"], ["徳田"], [""], [null]];
+    expect(collectDistinctInOrder_(rows, 0)).toEqual(["徳田", "下田"]);
+  });
+
+  it("既知集合に無い名前だけを未登録として返す", () => {
+    const known = new Set(["徳田"]);
+    expect(findUnknownNames_(["徳田", "下田", "上中島"], known)).toEqual(["下田", "上中島"]);
+  });
+
+  it("園地ごとに既知品種のみを観測順・重複除去で集める", () => {
+    const knownVarieties = new Set(["早生", "田口"]);
+    const rows = [
+      ["徳田", "早生"],
+      ["徳田", "不明品種"],
+      ["徳田", "田口"],
+      ["徳田", "早生"],
+      ["下田", "田口"],
+      ["", "早生"],
+      ["上中島", ""],
+    ];
+    const observations = buildOrchardVarietyObservations_(rows, 0, 1, knownVarieties);
+    expect(observations["徳田"]).toEqual(["早生", "田口"]);
+    expect(observations["下田"]).toEqual(["田口"]);
+    expect(observations["上中島"]).toBeUndefined();
+  });
+
+  describe("既定品種スロットの補充", () => {
+    it("空欄スロットだけを観測順の品種で埋める", () => {
+      const result = fillVarietySlots_(["", "", ""], ["早生", "田口", "ゆら早生"], 3);
+      expect(result).toEqual(["早生", "田口", "ゆら早生"]);
+    });
+
+    it("既に入っている値は上書きしない", () => {
+      const result = fillVarietySlots_(["早生", "", ""], ["田口", "早生", "ゆら早生"], 3);
+      expect(result).toEqual(["早生", "田口", "ゆら早生"]);
+    });
+
+    it("既存スロットに無い品種だけを新規に補充する", () => {
+      const result = fillVarietySlots_(["早生", "田口", ""], ["田口", "早生", "ゆら早生"], 3);
+      expect(result).toEqual(["早生", "田口", "ゆら早生"]);
+    });
+
+    it("4件目以降の品種は追加しない(先着3件)", () => {
+      const result = fillVarietySlots_(["早生", "田口", "ゆら早生"], ["YN26"], 3);
+      expect(result).toEqual(["早生", "田口", "ゆら早生"]);
+    });
+
+    it("観測数がスロット数より少なければ残りは空欄のまま", () => {
+      const result = fillVarietySlots_(["", "", ""], ["早生"], 3);
+      expect(result).toEqual(["早生", "", ""]);
+    });
   });
 });

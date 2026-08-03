@@ -57,7 +57,7 @@ Cloudflare Tunnel             Googleスプレッドシート
 | Input画面 | 入力中データ、API結果 | ブラウザ上の確認中データのみ |
 | Input API | 確認済み入力、環境設定 | `調査原票`、補正ログ |
 | PaddleOCR | 送信された画像 | 永続データなし。一時ファイルのみ |
-| Google Sheets | `入力マスタ`、`調査原票`の見出し | Inputが`調査原票`へ追記 |
+| Google Sheets | `入力マスタ`、`調査原票`の見出し | Inputが`調査原票`へ追記。Apps Script(`syncInputMasterFromRawSheet`、30分ごとの時間主導トリガー)が`調査原票`の未登録の園地名・処理区名と園地-品種の紐づけを`入力マスタ`へ追記 |
 | Output側 | `調査原票` | Input正本を更新しない |
 
 ## 障害時の分離
