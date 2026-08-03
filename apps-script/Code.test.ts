@@ -29,13 +29,14 @@ type AppsScriptHelpers = {
     knownVarietyNames: Set<string>,
   ) => Record<string, string[]>;
   fillVarietySlots_: (currentSlots: unknown[], observedVarieties: string[], maxSlots: number) => unknown[];
+  lastRowWithContent_: (rows: unknown[][], columnIndex: number) => number;
 };
 
 function loadHelpers(): AppsScriptHelpers {
   const source = readFileSync(new URL("./Code.gs", import.meta.url), "utf8");
   const context: Record<string, unknown> = {};
   vm.runInNewContext(
-    `${source}\nthis.helpers = { ensureDiameterOutputHeaders_, buildSurveyDataRow_, surveyDateParts_, validateCanonicalHeaders_, optionalNumber_, splitAliases_, buildKnownNamesByKind_, collectDistinctInOrder_, findUnknownNames_, buildOrchardVarietyObservations_, fillVarietySlots_ };`,
+    `${source}\nthis.helpers = { ensureDiameterOutputHeaders_, buildSurveyDataRow_, surveyDateParts_, validateCanonicalHeaders_, optionalNumber_, splitAliases_, buildKnownNamesByKind_, collectDistinctInOrder_, findUnknownNames_, buildOrchardVarietyObservations_, fillVarietySlots_, lastRowWithContent_ };`,
     context,
   );
   return context.helpers as AppsScriptHelpers;
@@ -45,6 +46,7 @@ const {
   ensureDiameterOutputHeaders_, buildSurveyDataRow_, surveyDateParts_,
   validateCanonicalHeaders_, optionalNumber_, splitAliases_, buildKnownNamesByKind_,
   collectDistinctInOrder_, findUnknownNames_, buildOrchardVarietyObservations_, fillVarietySlots_,
+  lastRowWithContent_,
 } = loadHelpers();
 
 describe("調査データの横径変換", () => {
@@ -246,6 +248,43 @@ describe("入力マスタの自動学習", () => {
     it("観測数がスロット数より少なければ残りは空欄のまま", () => {
       const result = fillVarietySlots_(["", "", ""], ["早生"], 3);
       expect(result).toEqual(["早生", "", ""]);
+    });
+  });
+
+  describe("追記位置の計算", () => {
+    it("種別列に値がある最後の行の次を返す", () => {
+      const rows = [
+        ["園地", "徳田"],
+        ["処理区", "無処理区"],
+        ["", ""],
+        ["", ""],
+      ];
+      expect(lastRowWithContent_(rows, 0)).toBe(3);
+    });
+
+    it("チェックボックスのFALSEだけが入った空欄行は無視する", () => {
+      const rows = [
+        ["園地", "徳田", "", "", false, false, false],
+        ["", "", "", "", false, false, false],
+        ["", "", "", "", false, false, false],
+      ];
+      expect(lastRowWithContent_(rows, 0)).toBe(2);
+    });
+
+    it("データ行が無ければヘッダー行(1)を返す", () => {
+      expect(lastRowWithContent_([], 0)).toBe(1);
+      expect(lastRowWithContent_([["", ""], ["", ""]], 0)).toBe(1);
+    });
+
+    it("末尾ではなく途中に手動追記された行があっても、そこを最後の行として検出する", () => {
+      const rows = [
+        ["園地", "徳田"],
+        ["", ""],
+        ["処理区", "無処理区"],
+        ["", ""],
+        ["", ""],
+      ];
+      expect(lastRowWithContent_(rows, 0)).toBe(4);
     });
   });
 });
