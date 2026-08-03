@@ -33,6 +33,19 @@ function missingCell(value: number | null | undefined): CellValue {
   return value ?? "";
 }
 
+/**
+ * Google Sheetsが日付として認識できる "yyyy/MM/dd HH:mm:ss"（日本時間）へ変換する。
+ * ISO 8601文字列（"T"区切り・"Z"付き）をそのまま書き込むと、Sheets側は日付として
+ * 解釈できず生の文字列表示になってしまうため。
+ */
+export function formatSheetDateTime(iso: string): string {
+  const date = new Date(iso);
+  const jst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${jst.getUTCFullYear()}/${pad(jst.getUTCMonth() + 1)}/${pad(jst.getUTCDate())} `
+    + `${pad(jst.getUTCHours())}:${pad(jst.getUTCMinutes())}:${pad(jst.getUTCSeconds())}`;
+}
+
 function recordCells(
   record: SurveyRecord,
   id: string,
@@ -41,14 +54,15 @@ function recordCells(
   options: GoogleSheetsSurveyRecordPersistenceOptions,
 ): Record<RawHeader, CellValue> {
   const diameters = Array.from({ length: 10 }, (_, index) => missingCell(record.diametersMm[index]));
+  const registeredAtCell = formatSheetDateTime(registeredAt);
   return {
     登録ID: id,
     編集キーハッシュ: editKeyHash,
-    登録日時: registeredAt,
-    更新日時: registeredAt,
+    登録日時: registeredAtCell,
+    更新日時: registeredAtCell,
     改訂番号: 1,
     データ状態: "有効",
-    計測日: record.measuredAt,
+    計測日: formatSheetDateTime(record.measuredAt),
     園地名: record.orchard,
     品種: record.variety,
     処理区: record.treatment ?? "",
