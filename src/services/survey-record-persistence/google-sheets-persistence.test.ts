@@ -4,6 +4,7 @@ import type { GoogleSheetsClient } from "./google-sheets-client";
 import {
   DEFAULT_SURVEY_RAW_SHEET_NAME,
   DEFAULT_SURVEY_SPREADSHEET_ID,
+  formatSheetDateTime,
   GoogleSheetsSurveyRecordPersistence,
   SURVEY_RAW_HEADERS,
 } from "./google-sheets-persistence";
@@ -47,8 +48,9 @@ describe("GoogleSheetsSurveyRecordPersistence", () => {
     }));
     const row = client.appendRows.mock.calls[0][0].rows[0];
     expect(row[SURVEY_RAW_HEADERS.indexOf("編集キーハッシュ")]).toBe("hashed:one-time-edit-key");
-    expect(row[SURVEY_RAW_HEADERS.indexOf("登録日時")]).toBe("2026-07-20T00:00:00.000Z");
-    expect(row[SURVEY_RAW_HEADERS.indexOf("更新日時")]).toBe("2026-07-20T00:00:00.000Z");
+    expect(row[SURVEY_RAW_HEADERS.indexOf("登録日時")]).toBe("2026/07/20 09:00:00");
+    expect(row[SURVEY_RAW_HEADERS.indexOf("更新日時")]).toBe("2026/07/20 09:00:00");
+    expect(row[SURVEY_RAW_HEADERS.indexOf("計測日")]).toBe("2026/07/19 09:00:00");
     expect(row[SURVEY_RAW_HEADERS.indexOf("改訂番号")]).toBe(1);
     expect(row[SURVEY_RAW_HEADERS.indexOf("データ状態")]).toBe("有効");
     expect(row).not.toContain("one-time-edit-key");
@@ -86,5 +88,19 @@ describe("GoogleSheetsSurveyRecordPersistence", () => {
     await expect(new GoogleSheetsSurveyRecordPersistence(client).save([record]))
       .rejects.toMatchObject({ code: "PROVIDER_ERROR" });
     expect(client.appendRows).not.toHaveBeenCalled();
+  });
+});
+
+describe("formatSheetDateTime", () => {
+  it("converts an ISO 8601 UTC string to a Sheets-recognizable JST datetime", () => {
+    expect(formatSheetDateTime("2026-08-03T03:36:53.536Z")).toBe("2026/08/03 12:36:53");
+  });
+
+  it("rolls over to the next JST day near UTC midnight", () => {
+    expect(formatSheetDateTime("2026-07-19T15:30:00.000Z")).toBe("2026/07/20 00:30:00");
+  });
+
+  it("pads single-digit month, day, hour, minute, and second", () => {
+    expect(formatSheetDateTime("2026-01-05T00:05:09.000Z")).toBe("2026/01/05 09:05:09");
   });
 });
