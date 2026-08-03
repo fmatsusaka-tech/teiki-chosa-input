@@ -570,6 +570,110 @@ ${varietyAlias}
     expect(result.records[2].warnings).toContain("横径が未入力です");
   });
 
+  it("「* 玉1：41.3」のような玉番号付き箇条書き横径を解析できる", () => {
+    const result = parseSurveyMemo(`徳田
+
+* 玉1：41.3
+* 玉2：42.2
+* 玉3：43.2
+* 糖度：8.7
+* 酸度：3.10`);
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]).toMatchObject({
+      orchard: "徳田",
+      diametersMm: [41.3, 42.2, 43.2],
+      brix: 8.7,
+      acidity: 3.1,
+    });
+  });
+
+  it("園地見出しの「品種：X・Y」を品種と処理区に分割する", () => {
+    const result = parseSurveyMemo(`なる2（品種：わせ・フィガロン区）
+
+* 玉1：43.6
+* 玉2：45.9
+* 糖度：8.9
+* 酸度：3.08
+
+12号（品種：YN26・処理区設定なし）
+
+* 玉1：42.5
+* 玉2：48.2
+* 糖度：8.3
+* 酸度：2.04`);
+
+    expect(result.records).toHaveLength(2);
+    expect(result.records[0]).toMatchObject({
+      orchard: "なる2",
+      variety: WASE_VARIETY_NAME,
+      treatment: "フィガロン区",
+    });
+    expect(result.records[0].warnings).toContain(
+      "処理区マスタ未登録です。処理区名を確認してください",
+    );
+
+    expect(result.records[1]).toMatchObject({
+      orchard: "12号",
+      variety: "YN26",
+      treatment: null,
+    });
+    expect(
+      result.records[1].warnings.some((warning) => warning.includes("処理区")),
+    ).toBe(false);
+  });
+
+  it("箇条書きの「備考：」ラベルを備考へそのまま入れる", () => {
+    const result = parseSurveyMemo(`吉川
+
+* 玉1：38.2
+* 玉2：39.0
+* 糖度：10.4
+* 酸度：3.05
+* 備考：かなり弱ってる`);
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0].notes).toBe("かなり弱ってる");
+  });
+
+  it("同じ園地内で処理区ごとの見出しが続く場合、処理区ごとに別レコードへ分ける", () => {
+    const result = parseSurveyMemo(`有中（品種：ゆらわせ）
+無処理区
+
+* 玉1：38.3
+* 玉2：40.8
+* 糖度：9.2
+* 酸度：2.44
+
+スキーポン区
+
+* 玉1：37.6
+* 玉2：43.7
+* 糖度：9.1
+* 酸度：2.74
+
+フィガロン区
+
+* 玉1：43.9
+* 玉2：46.6
+* 糖度：8.6
+* 酸度：2.76`);
+
+    expect(result.records).toHaveLength(3);
+    expect(result.records.map((r) => r.orchard)).toEqual(["有中", "有中", "有中"]);
+    expect(result.records.map((r) => r.treatment)).toEqual([
+      "無処理区",
+      "スキーポン区",
+      "フィガロン区",
+    ]);
+    expect(result.records.map((r) => r.diametersMm)).toEqual([
+      [38.3, 40.8],
+      [37.6, 43.7],
+      [43.9, 46.6],
+    ]);
+    expect(result.records.every((r) => r.variety === "ゆら早生")).toBe(true);
+  });
+
   it.each([
     ["田口早生", "田口"],
     ["林", "晩生（林など）"],

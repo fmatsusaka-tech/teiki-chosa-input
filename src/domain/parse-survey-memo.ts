@@ -10,8 +10,10 @@ const numberPattern = /^-?\d+(?:\.\d+)?$/;
 const numberWithUnitPattern = /^(-?\d+(?:\.\d+)?)\s*(?:ミリ|mm|㎜)$/i;
 const numberWithOrdinalPrefixPattern = /^\d+[.、]\s*(-?\d+(?:\.\d+)?)\s*(?:ミリ|mm|㎜)?$/i;
 const diameterEntryPattern = /^\d+番\s*(-?\d+(?:\.\d+)?)\s*(?:ミリ|mm|㎜)?$/i;
-const labeledFieldPattern = /^(?:[*・\-]\s*)?(横径|糖度|酸度)\s*[:：]\s*(.+)$/;
+const labeledFieldPattern = /^(?:[*・\-]\s*)?(横径|糖度|酸度|備考)\s*[:：]\s*(.+)$/;
+const ballDiameterPattern = /^(?:[*・\-]\s*)?玉\s*\d+\s*[:：]\s*(-?\d+(?:\.\d+)?)\s*(?:ミリ|mm|㎜)?$/i;
 const orchardWithVarietyPattern = /^(.+?)[（(]\s*品種\s*[:：]\s*(.+?)\s*[）)]$/;
+const noTreatmentPattern = /なし$/;
 
 /** Matches "1. 46.1" style single-value lines in addition to plain and unit-suffixed numbers. */
 function extractNumericToken(line: string): string | null {
@@ -37,8 +39,10 @@ function extractDiameterList(line: string): string[] | null {
   return values.length > 0 ? values : null;
 }
 
-/** Parses a "* 横径：40.1、39.4" style labeled line into its field name and values. */
-function extractLabeledField(line: string): { field: string; tokens: string[] } | null {
+/** Parses a "* 横径：40.1、39.4" style labeled line into its field name, raw text, and values. */
+function extractLabeledField(
+  line: string,
+): { field: string; rawValue: string; tokens: string[] } | null {
   const match = line.match(labeledFieldPattern);
   if (!match) return null;
   const [, field, rawValue] = match;
@@ -48,14 +52,21 @@ function extractLabeledField(line: string): { field: string; tokens: string[] } 
     .map((segment) => segment.trim())
     .map((segment) => extractNumericToken(segment))
     .filter((token): token is string => token !== null);
-  return { field, tokens };
+  return { field, rawValue: trimmedValue, tokens };
+}
+
+/** Matches "* 玉1：41.3" style single-ball diameter lines. */
+function extractBallDiameter(line: string): string | null {
+  const match = line.match(ballDiameterPattern);
+  return match ? match[1] : null;
 }
 
 function isNumericLikeLine(line: string): boolean {
   return (
     extractNumericToken(line) !== null ||
     extractDiameterList(line) !== null ||
-    extractLabeledField(line) !== null
+    extractLabeledField(line) !== null ||
+    extractBallDiameter(line) !== null
   );
 }
 
@@ -114,6 +125,27 @@ function resolveOrchardHeading(
     canonicalName: fuzzy,
     fuzzyWarning: `園地名「${rawLine}」は「${fuzzy}」の入力間違いの可能性があるため、そちらとして扱いました。表記をご確認ください`,
   };
+}
+
+/**
+ * Splits a "（品種：ゆらわせ・フィガロン区）" style value into its variety and
+ * (optional) treatment parts. A trailing part ending in "なし" (e.g. 処理区設定なし)
+ * means no treatment was specified.
+ */
+function splitVarietyAndTreatment(rawValue: string): {
+  varietyText: string;
+  treatmentText: string | null;
+} {
+  const segments = rawValue
+    .split(/[・、,]/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  const [varietyText, ...rest] = segments;
+  const treatmentText = rest.join("・");
+  if (!treatmentText || noTreatmentPattern.test(treatmentText)) {
+    return { varietyText: varietyText ?? rawValue, treatmentText: null };
+  }
+  return { varietyText: varietyText ?? rawValue, treatmentText };
 }
 
 function normalizeDate(value: string, registeredAt: string): string {
@@ -213,6 +245,12 @@ export function parseSurveyMemo(
   let explicitBrixToken: string | null = null;
   let explicitAcidityToken: string | null = null;
 
+  const hasCollectedMeasurements = () =>
+    numericLines.length > 0 ||
+    explicitDiameterTokens !== null ||
+    explicitBrixToken !== null ||
+    explicitAcidityToken !== null;
+
   const flush = () => {
     const hasExplicitFields =
       explicitDiameterTokens !== null || explicitBrixToken !== null || explicitAcidityToken !== null;
@@ -285,9 +323,15 @@ export function parseSurveyMemo(
 
     const treatment = treatmentHeadingMap.get(normalizeOrchard(line));
     if (treatment) {
-      if (numericLines.length > 0) flush();
+      if (hasCollectedMeasurements()) flush();
       currentTreatment = treatment;
       currentTreatmentIsUnregistered = false;
+      continue;
+    }
+
+    const ballDiameter = extractBallDiameter(line);
+    if (ballDiameter !== null) {
+      explicitDiameterTokens = [...(explicitDiameterTokens ?? []), ballDiameter];
       continue;
     }
 
@@ -299,21 +343,30 @@ export function parseSurveyMemo(
         explicitBrixToken = labeledField.tokens[0] ?? explicitBrixToken;
       } else if (labeledField.field === "酸度") {
         explicitAcidityToken = labeledField.tokens[0] ?? explicitAcidityToken;
+      } else if (labeledField.field === "備考") {
+        currentNotes.push(labeledField.rawValue);
       }
       continue;
     }
 
     const orchardWithVarietyMatch = line.match(orchardWithVarietyPattern);
     if (orchardWithVarietyMatch) {
-      const [, orchardText, varietyText] = orchardWithVarietyMatch;
+      const [, orchardText, varietyAndTreatmentText] = orchardWithVarietyMatch;
+      const { varietyText, treatmentText } = splitVarietyAndTreatment(varietyAndTreatmentText);
       const resolution = resolveOrchardHeading(orchardText, orchardHeadingMap, catalog.orchards);
       flush();
       currentOrchard = resolution?.canonicalName ?? normalizeOrchard(orchardText);
       currentOrchardIsUnregistered = resolution === null;
       currentOrchardFuzzyWarning = resolution?.fuzzyWarning ?? null;
       currentVariety = varietyHeadingMap.get(normalizeOrchard(varietyText)) ?? null;
-      currentTreatment = "";
-      currentTreatmentIsUnregistered = false;
+      if (treatmentText) {
+        const exactTreatment = treatmentHeadingMap.get(normalizeOrchard(treatmentText));
+        currentTreatment = exactTreatment ?? treatmentText;
+        currentTreatmentIsUnregistered = !exactTreatment;
+      } else {
+        currentTreatment = "";
+        currentTreatmentIsUnregistered = false;
+      }
       currentNotes = [];
       continue;
     }
@@ -369,12 +422,7 @@ export function parseSurveyMemo(
     // A heading between the orchard line and its measurements that matches neither
     // the variety nor treatment master is most often an unregistered treatment name
     // (e.g. a new spray/rootstock plot), not a brand-new orchard.
-    const hasCollectedMeasurements =
-      numericLines.length > 0 ||
-      explicitDiameterTokens !== null ||
-      explicitBrixToken !== null ||
-      explicitAcidityToken !== null;
-    if (currentOrchard && !hasCollectedMeasurements && currentVariety === null) {
+    if (currentOrchard && !hasCollectedMeasurements() && currentVariety === null) {
       currentTreatment = line;
       currentTreatmentIsUnregistered = true;
       continue;
@@ -385,9 +433,20 @@ export function parseSurveyMemo(
       .findIndex((candidate) => !isNumericLikeLine(candidate));
     const numericRunLength =
       followingNumericCount < 0 ? lines.length - lineIndex - 1 : followingNumericCount;
-    const looksLikeUnknownOrchard =
+    const looksLikeMoreData =
       numericRunLength > 0 && (numericLines.length === 0 || numericRunLength >= 3);
-    if (looksLikeUnknownOrchard) {
+    if (looksLikeMoreData && currentOrchard && hasCollectedMeasurements()) {
+      // The current orchard already has a complete measurement set, and more
+      // measurement-like lines follow: this heading most likely starts a new
+      // treatment plot under the SAME orchard (e.g. スキーポン区 after 無処理区),
+      // not a brand-new orchard.
+      flush();
+      currentTreatment = line;
+      currentTreatmentIsUnregistered = true;
+      currentNotes = [];
+      continue;
+    }
+    if (looksLikeMoreData) {
       flush();
       currentOrchard = normalized;
       currentVariety = null;
