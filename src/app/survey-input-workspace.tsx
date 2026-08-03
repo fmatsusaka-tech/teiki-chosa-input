@@ -332,6 +332,9 @@ export function SurveyInputWorkspace() {
     const recordsWithIds = selected.map(({ record }) => ({
       ...record,
       id: record.id ?? crypto.randomUUID(),
+      // An empty string means "自由入力 selected, nothing typed yet" for display
+      // purposes only; the persistence schema requires either null or a non-empty value.
+      treatment: record.treatment || null,
     }));
 
     setRecords((current) =>
@@ -597,8 +600,11 @@ export function SurveyInputWorkspace() {
                             onKeyDown={focusNextField}
                             onChange={(event) => {
                               if (event.target.value === CUSTOM_TREATMENT_OPTION) {
-                                if (treatmentSuggestions.includes(record.treatment ?? "")) {
-                                  updateRecord(index, "treatment", null);
+                                if (
+                                  resolveTreatmentOption(record.treatment, treatmentSuggestions) !==
+                                  CUSTOM_TREATMENT_OPTION
+                                ) {
+                                  updateRecord(index, "treatment", "");
                                 }
                                 return;
                               }
@@ -624,7 +630,7 @@ export function SurveyInputWorkspace() {
                               placeholder="処理区名を入力"
                               onKeyDown={focusNextField}
                               onChange={(event) =>
-                                updateRecord(index, "treatment", event.target.value || null)
+                                updateRecord(index, "treatment", event.target.value)
                               }
                             />
                           )}

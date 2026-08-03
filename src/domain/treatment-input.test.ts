@@ -17,9 +17,12 @@ describe("resolveTreatmentOption", () => {
     );
   });
 
-  it("未選択（null・未入力）は空文字を返す", () => {
+  it("未選択（null・undefined）は空文字を返す", () => {
     expect(resolveTreatmentOption(null, suggestions)).toBe("");
     expect(resolveTreatmentOption(undefined, suggestions)).toBe("");
-    expect(resolveTreatmentOption("", suggestions)).toBe("");
+  });
+
+  it("自由入力中（空文字）は自由入力の選択肢を返す", () => {
+    expect(resolveTreatmentOption("", suggestions)).toBe(CUSTOM_TREATMENT_OPTION);
   });
 });
