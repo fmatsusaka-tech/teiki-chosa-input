@@ -239,7 +239,8 @@ function syncInputMasterFromRawSheet() {
     newRows.push(rowForHeaders_({ 種別: "処理区", 正式名称: name, 有効: true }, masterHeaders));
   });
   if (newRows.length > 0) {
-    masterSheet.getRange(masterSheet.getLastRow() + 1, 1, newRows.length, masterHeaders.length).setValues(newRows);
+    const appendRow = lastRowWithContent_(masterRows, kindIndex) + 1;
+    masterSheet.getRange(appendRow, 1, newRows.length, masterHeaders.length).setValues(newRows);
     masterRows = readSheetDataRows_(masterSheet, masterHeaders.length);
   }
 
@@ -294,6 +295,19 @@ function ensureInputMasterHeaders_(sheet) {
 function readSheetDataRows_(sheet, columnCount) {
   const lastRow = sheet.getLastRow();
   return lastRow < 2 ? [] : sheet.getRange(2, 1, lastRow - 1, columnCount).getValues();
+}
+
+/**
+ * 指定列(種別など)に値がある最後の行番号(シート上の実際の行番号)を返す。
+ * チェックボックスの初期値(FALSE)だけが入った空欄行は「データがある行」と
+ * みなさない。該当行が無ければヘッダー行(1)を返す。手動追記・自動追記が
+ * 混在していても、実データの直後に新規行を追記するための位置計算に使う。
+ */
+function lastRowWithContent_(rows, columnIndex) {
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    if (cleanText_(rows[index][columnIndex]) !== "") return index + 2;
+  }
+  return 1;
 }
 
 function splitAliases_(value) {
