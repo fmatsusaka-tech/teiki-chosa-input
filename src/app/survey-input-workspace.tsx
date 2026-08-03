@@ -21,6 +21,7 @@ import {
 import {
   defaultSurveyMasterCatalog,
   getActiveMasterNames,
+  WASE_VARIETY_NAME,
   type SurveyMasterCatalog,
 } from "../domain/survey-masters";
 import type { SurveyRecord } from "../domain/survey-record";
@@ -133,7 +134,9 @@ export function SurveyInputWorkspace() {
     }
 
     const parsed = parseSurveyMemo(text, new Date().toISOString(), masterCatalog);
-    const datedRecords = applySurveyDate(parsed.records, surveyDate);
+    const datedRecords = applySurveyDate(parsed.records, surveyDate).map((record) =>
+      record.variety === "未設定" ? { ...record, variety: WASE_VARIETY_NAME } : record,
+    );
     setRecords(datedRecords);
     setSelectedRows(new Set(datedRecords.map((_, index) => index)));
     setExpandedRows(
@@ -141,7 +144,7 @@ export function SurveyInputWorkspace() {
         datedRecords
           .map((record, index) =>
             record.brix === null ||
-            record.variety === "未設定"
+            record.warnings.includes("品種を特定できませんでした")
               ? index
               : -1,
           )
@@ -627,10 +630,6 @@ export function SurveyInputWorkspace() {
                           )}
                           <small>登録されていない処理区は「自由入力」を選んで入力できます。</small>
                         </label>
-                        <label className="field-full">
-                          <span>備考</span>
-                          <input data-entry-field="true" value={record.notes} onKeyDown={focusNextField} onChange={(event) => updateRecord(index, "notes", event.target.value)} />
-                        </label>
                         <label className={record.brix === null ? "required-field" : ""}>
                           <span>糖度{record.brix === null ? "（必須）" : ""}</span>
                           <input data-entry-field="true" type="number" inputMode="decimal" min="0" step="0.1" value={record.brix ?? ""} placeholder="例：12.5" onKeyDown={focusNextField} onChange={(event) => updateMeasurement(index, "brix", event.target.value)} />
@@ -651,6 +650,13 @@ export function SurveyInputWorkspace() {
                             <input data-entry-field="true" type="number" inputMode="decimal" min="0.1" step="0.1" value={diameter ?? ""} onKeyDown={focusNextField} onChange={(event) => updateDiameter(index, diameterIndex, event.target.value)} aria-label={`玉${diameterIndex + 1}の横径`} />
                           </label>
                         ))}
+                      </div>
+
+                      <div className="record-fields">
+                        <label className="field-full">
+                          <span>備考</span>
+                          <input data-entry-field="true" value={record.notes} onKeyDown={focusNextField} onChange={(event) => updateRecord(index, "notes", event.target.value)} />
+                        </label>
                       </div>
 
                       {warnings.length > 0 && (

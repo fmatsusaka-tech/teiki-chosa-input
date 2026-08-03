@@ -310,9 +310,9 @@ describe("parseSurveyMemo", () => {
       variety: "未設定",
       diametersMm: [41, 42, 43, 44],
     });
-    expect(result.records[0].warnings).toContain(
-      "園地マスタ未登録です。園地名と品種を確認してください",
-    );
+    expect(
+      result.records[0].warnings.some((warning) => warning.includes("マスタにない園地ですね")),
+    ).toBe(true);
   });
 
   it("外部マスタの別名と既定品種を解析に使用する", () => {
@@ -618,9 +618,9 @@ ${varietyAlias}
       variety: "YN26",
       treatment: null,
     });
-    expect(
-      result.records[1].warnings.some((warning) => warning.includes("処理区")),
-    ).toBe(false);
+    expect(result.records[1].warnings).not.toContain(
+      "処理区マスタ未登録です。処理区名を確認してください",
+    );
   });
 
   it("箇条書きの「備考：」ラベルを備考へそのまま入れる", () => {

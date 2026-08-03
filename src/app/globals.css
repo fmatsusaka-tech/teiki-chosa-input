@@ -310,6 +310,8 @@ button:disabled { cursor: not-allowed; background: #e3e7e3; color: #818982; tran
   font-size: 0.8rem;
   line-height: 1.55;
 }
+.warning-list li { white-space: pre-line; }
+.warning-list li + li { margin-top: 8px; }
 .sticky-register-bar {
   position: sticky;
   bottom: 64px;

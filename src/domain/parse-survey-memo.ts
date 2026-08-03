@@ -280,7 +280,13 @@ export function parseSurveyMemo(
       currentVariety ?? catalog.orchardVarietyDefaults[currentOrchard] ?? "未設定";
     if (currentOrchardFuzzyWarning) warnings.push(currentOrchardFuzzyWarning);
     if (currentOrchardIsUnregistered) {
-      warnings.push("園地マスタ未登録です。園地名と品種を確認してください");
+      warnings.push(
+        "マスタにない園地ですね！ 園地名に品種は含めないで下さいね。\n" +
+          "処理区を設定すれば園地内でも区別が出来ます。\n" +
+          "　例：\n" +
+          "〇　園地名　大谷　処理区　手前　品種名　ゆら早生\n" +
+          "×　園地名　大谷手前ゆら　品種名　ゆら早生",
+      );
     }
     if (currentTreatmentIsUnregistered) {
       warnings.push("処理区マスタ未登録です。処理区名を確認してください");
