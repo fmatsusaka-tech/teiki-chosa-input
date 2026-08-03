@@ -674,6 +674,28 @@ ${varietyAlias}
     expect(result.records.every((r) => r.variety === "ゆら早生")).toBe(true);
   });
 
+  it("糖度・酸度が横径より先に書かれていても解析できる", () => {
+    const result = parseSurveyMemo(`徳田
+10.9
+3.8
+43
+42
+45
+80
+36
+てすと`);
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]).toMatchObject({
+      orchard: "徳田",
+      diametersMm: [43, 42, 45, 80, 36],
+      brix: 10.9,
+      acidity: 3.8,
+      notes: "てすと",
+    });
+    expect(result.records[0].warnings).not.toContain("糖度が未入力です");
+  });
+
   it.each([
     ["田口早生", "田口"],
     ["林", "晩生（林など）"],

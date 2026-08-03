@@ -180,20 +180,34 @@ function parseDiameter(raw: string): { value: number; warning?: string } {
   return { value: numeric };
 }
 
-function hasSugarAcidPair(tokens: string[]): boolean {
-  if (tokens.length < 3) return false;
-  const brixToken = tokens.at(-2) ?? "";
-  const acidityToken = tokens.at(-1) ?? "";
+const BRIX_MIN = 5;
+const BRIX_MAX = 19;
+const ACIDITY_MIN = 0;
+const ACIDITY_MAX = 7;
+
+function looksLikeSugarAcidPair(brixToken: string, acidityToken: string): boolean {
   const brix = Number(brixToken);
   const acidity = Number(acidityToken);
 
   return (
     (brixToken.includes(".") || acidityToken.includes(".")) &&
-    brix >= 4 &&
-    brix <= 30 &&
-    acidity >= 0 &&
-    acidity <= 10
+    brix >= BRIX_MIN &&
+    brix <= BRIX_MAX &&
+    acidity >= ACIDITY_MIN &&
+    acidity <= ACIDITY_MAX
   );
+}
+
+/** True when the last two numbers look like a trailing "…横径, 糖度, 酸度" pair. */
+function hasSugarAcidPair(tokens: string[]): boolean {
+  if (tokens.length < 3) return false;
+  return looksLikeSugarAcidPair(tokens.at(-2) ?? "", tokens.at(-1) ?? "");
+}
+
+/** True when the first two numbers look like a leading "糖度, 酸度, 横径…" pair. */
+function hasLeadingSugarAcidPair(tokens: string[]): boolean {
+  if (tokens.length < 3) return false;
+  return looksLikeSugarAcidPair(tokens[0] ?? "", tokens[1] ?? "");
 }
 
 export function parseSurveyMemo(
@@ -264,11 +278,18 @@ export function parseSurveyMemo(
       diameterTokens = explicitDiameterTokens ?? [];
       brix = explicitBrixToken !== null ? Number(explicitBrixToken) : null;
       acidity = explicitAcidityToken !== null ? Number(explicitAcidityToken) : null;
+    } else if (hasSugarAcidPair(numericLines)) {
+      brix = Number(numericLines.at(-2));
+      acidity = Number(numericLines.at(-1));
+      diameterTokens = numericLines.slice(0, -2);
+    } else if (hasLeadingSugarAcidPair(numericLines)) {
+      brix = Number(numericLines[0]);
+      acidity = Number(numericLines[1]);
+      diameterTokens = numericLines.slice(2);
     } else {
-      const sugarAcidPresent = hasSugarAcidPair(numericLines);
-      brix = sugarAcidPresent ? Number(numericLines.at(-2)) : null;
-      acidity = sugarAcidPresent ? Number(numericLines.at(-1)) : null;
-      diameterTokens = sugarAcidPresent ? numericLines.slice(0, -2) : numericLines;
+      brix = null;
+      acidity = null;
+      diameterTokens = numericLines;
     }
     const diametersMm = diameterTokens.slice(0, 10).map((token) => {
       const parsed = parseDiameter(token);
