@@ -242,6 +242,30 @@ button:disabled { cursor: not-allowed; background: #e3e7e3; color: #818982; tran
 .missing-metric { color: var(--amber); font-size: 0.62rem; font-weight: 850; }
 .expand-mark { color: #657068; font-size: 1.15rem; text-align: center; }
 .record-detail { padding: 0 13px 17px 43px; }
+.source-reference {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border-radius: 11px;
+  background: var(--surface-soft);
+  border: 1px dashed #cfd6d0;
+}
+.source-reference-label {
+  display: block;
+  margin-bottom: 6px;
+  color: #566159;
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+.source-reference-text {
+  margin: 0;
+  max-height: 160px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: #3d443f;
+}
 .record-fields {
   display: grid;
   grid-template-columns: 1fr;
@@ -257,7 +281,9 @@ button:disabled { cursor: not-allowed; background: #e3e7e3; color: #818982; tran
   color: #566159;
   font-size: 0.75rem;
   font-weight: 750;
+  align-self: start;
 }
+.record-fields .field-full { grid-column: 1 / -1; }
 .record-fields input, .record-fields select, .diameter-grid input {
   width: 100%;
   padding: 10px;

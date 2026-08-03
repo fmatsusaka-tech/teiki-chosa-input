@@ -28,6 +28,10 @@ import {
   CUSTOM_VARIETY_OPTION,
   resolveVarietyOption,
 } from "../domain/variety-input";
+import {
+  CUSTOM_TREATMENT_OPTION,
+  resolveTreatmentOption,
+} from "../domain/treatment-input";
 import { registerSurveyRecords } from "../lib/register-survey-records";
 import { recordRowKey } from "./record-row-key";
 
@@ -87,6 +91,11 @@ export function SurveyInputWorkspace() {
   const varietySuggestions = useMemo(
     () => getActiveMasterNames(masterCatalog.varieties),
     [masterCatalog.varieties],
+  );
+
+  const treatmentSuggestions = useMemo(
+    () => getActiveMasterNames(masterCatalog.treatments),
+    [masterCatalog.treatments],
   );
 
   const missingBrixCount = useMemo(
@@ -511,7 +520,9 @@ export function SurveyInputWorkspace() {
                       onClick={() => toggleExpanded(index)}
                     >
                       <span className="orchard-name">{record.orchard || "園地未入力"}</span>
-                      <span className="record-meta">{record.variety}{record.notes ? `・${record.notes}` : ""}</span>
+                      <span className="record-meta">
+                        {[record.variety, record.treatment, record.notes].filter(Boolean).join("・")}
+                      </span>
                       <span className="metric"><small>平均</small>{formatNumber(mean)}</span>
                       <span className={`metric ${record.brix === null ? "missing-metric" : ""}`}><small>糖</small>{formatNumber(record.brix)}</span>
                       <span className={`metric ${record.acidity === null ? "missing-metric" : ""}`}><small>酸</small>{formatNumber(record.acidity)}</span>
@@ -521,12 +532,16 @@ export function SurveyInputWorkspace() {
 
                   {isExpanded && (
                     <div className="record-detail">
+                      <div className="source-reference">
+                        <span className="source-reference-label">元の入力データ</span>
+                        <pre className="source-reference-text">{sourceText}</pre>
+                      </div>
                       <div className="record-fields">
-                        <label>
+                        <label className="field-full">
                           <span>園地</span>
                           <input data-entry-field="true" value={record.orchard} onKeyDown={focusNextField} onChange={(event) => updateRecord(index, "orchard", event.target.value)} />
                         </label>
-                        <label>
+                        <label className="field-full">
                           <span>品種</span>
                           <select
                             data-entry-field="true"
@@ -568,8 +583,52 @@ export function SurveyInputWorkspace() {
                           )}
                           <small>新品種は「自由入力」を選んで入力できます。</small>
                         </label>
-                        <label>
-                          <span>処理区・備考</span>
+                        <label className="field-full">
+                          <span>処理区</span>
+                          <select
+                            data-entry-field="true"
+                            value={resolveTreatmentOption(
+                              record.treatment,
+                              treatmentSuggestions,
+                            )}
+                            onKeyDown={focusNextField}
+                            onChange={(event) => {
+                              if (event.target.value === CUSTOM_TREATMENT_OPTION) {
+                                if (treatmentSuggestions.includes(record.treatment ?? "")) {
+                                  updateRecord(index, "treatment", null);
+                                }
+                                return;
+                              }
+                              updateRecord(index, "treatment", event.target.value || null);
+                            }}
+                          >
+                            <option value="">（未選択）</option>
+                            {treatmentSuggestions.map((treatment) => (
+                              <option key={treatment} value={treatment}>
+                                {treatment}
+                              </option>
+                            ))}
+                            <option value={CUSTOM_TREATMENT_OPTION}>
+                              自由入力（新しい処理区など）
+                            </option>
+                          </select>
+                          {resolveTreatmentOption(record.treatment, treatmentSuggestions) ===
+                            CUSTOM_TREATMENT_OPTION && (
+                            <input
+                              className="variety-custom-input"
+                              data-entry-field="true"
+                              value={record.treatment ?? ""}
+                              placeholder="処理区名を入力"
+                              onKeyDown={focusNextField}
+                              onChange={(event) =>
+                                updateRecord(index, "treatment", event.target.value || null)
+                              }
+                            />
+                          )}
+                          <small>登録されていない処理区は「自由入力」を選んで入力できます。</small>
+                        </label>
+                        <label className="field-full">
+                          <span>備考</span>
                           <input data-entry-field="true" value={record.notes} onKeyDown={focusNextField} onChange={(event) => updateRecord(index, "notes", event.target.value)} />
                         </label>
                         <label className={record.brix === null ? "required-field" : ""}>

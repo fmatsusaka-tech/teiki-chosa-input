@@ -173,7 +173,8 @@ describe("parseSurveyMemo", () => {
     expect(result.records[0]).toMatchObject({
       orchard: "有中",
       variety: "ゆら早生",
-      notes: "無処理区",
+      treatment: "無処理区",
+      notes: "",
       diametersMm: [50.6, 50.4, 56.1, 57, 51.3, 57.2],
       brix: 16.1,
       acidity: 1,
@@ -208,7 +209,8 @@ describe("parseSurveyMemo", () => {
     expect(result.records).toHaveLength(9);
     expect(result.records[0]).toMatchObject({
       orchard: "有中",
-      notes: "無処理区",
+      treatment: "無処理区",
+      notes: "",
       diametersMm: [50.6, 50.4, 56.1, 57, 51.3, 57.2],
       brix: null,
       acidity: null,
@@ -219,7 +221,8 @@ describe("parseSurveyMemo", () => {
 
     expect(result.records[1]).toMatchObject({
       orchard: "有中",
-      notes: "スキー",
+      treatment: "スキー",
+      notes: "",
       diametersMm: [60.2, 58, 60.7, 54.1, 56.2, 53.5],
     });
 
@@ -396,6 +399,176 @@ ${varietyAlias}
       expect(result.records[0].variety).toBe(WASE_VARIETY_NAME);
     },
   );
+
+  it("横径がミリ単位の見出し付きでも解析できる", () => {
+    const result = parseSurveyMemo(`徳田
+ゆら
+49.8ミリ
+46.4ミリ
+46.6ミリ
+8.6
+3.54`);
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]).toMatchObject({
+      orchard: "徳田",
+      variety: "ゆら早生",
+      diametersMm: [49.8, 46.4, 46.6],
+      brix: 8.6,
+      acidity: 3.54,
+    });
+  });
+
+  it.each(["mm", "MM", "㎜"])("横径の単位%sも解析できる", (unit) => {
+    const result = parseSurveyMemo(`徳田
+41${unit}
+42${unit}
+43${unit}
+10.5
+1.0`);
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0].diametersMm).toEqual([41, 42, 43]);
+  });
+
+  it("「1番 49.8、2番 45.6」のような番号付き一行横径を解析できる", () => {
+    const result = parseSurveyMemo(
+      `向山畑
+向山
+1番 49.8、2番 45.6、3番 45.4。
+8.2
+3.7`,
+      undefined,
+      {
+        orchards: [
+          { id: "mukoyama-hatake", canonicalName: "向山畑", aliases: [], isActive: true },
+        ],
+        varieties: [
+          { id: "mukoyama", canonicalName: "向山", aliases: [], isActive: true },
+        ],
+        treatments: [],
+        orchardVarietyDefaults: {},
+      },
+    );
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]).toMatchObject({
+      orchard: "向山畑",
+      variety: "向山",
+      diametersMm: [49.8, 45.6, 45.4],
+      brix: 8.2,
+      acidity: 3.7,
+    });
+  });
+
+  it("「1. 46.1」のような番号付き複数行横径を解析できる", () => {
+    const result = parseSurveyMemo(`徳田
+ゆら
+1. 46.1
+2. 46.3
+3. 44.5
+8.6
+2.87`);
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]).toMatchObject({
+      orchard: "徳田",
+      variety: "ゆら早生",
+      diametersMm: [46.1, 46.3, 44.5],
+      brix: 8.6,
+      acidity: 2.87,
+    });
+  });
+
+  it("品種マスタにない見出しは処理区として扱う", () => {
+    const result = parseSurveyMemo(
+      `寅畑
+スキーポン
+1. 46.1
+2. 46.3
+3. 44.5
+8.6
+2.87`,
+      undefined,
+      {
+        orchards: [{ id: "torahata", canonicalName: "寅畑", aliases: [], isActive: true }],
+        varieties: [],
+        treatments: [],
+        orchardVarietyDefaults: {},
+      },
+    );
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]).toMatchObject({
+      orchard: "寅畑",
+      variety: "未設定",
+      treatment: "スキーポン",
+      notes: "",
+      diametersMm: [46.1, 46.3, 44.5],
+      brix: 8.6,
+      acidity: 2.87,
+    });
+    expect(result.records[0].warnings).toContain(
+      "処理区マスタ未登録です。処理区名を確認してください",
+    );
+  });
+
+  it("園地（品種：X）と箇条書きの横径・糖度・酸度、変換ミスした園地名の候補提案に対応する", () => {
+    const result = parseSurveyMemo(`鳴る1（品種：ゆらわせ）
+
+* 横径：40.1、39.4、37.9、40.5、43.9、44.1
+* 糖度：8.2
+* 酸度：3.17
+
+鳴る2（品種：わせ）
+フィガロン区
+
+* 横径：43.6、45.9、41.6、50.3、48.2、49.5、45.5、41.3、42.6
+* 糖度：8.9
+* 酸度：3.08
+
+
+徳打
+
+* 糖度：8.7
+* 酸度：3.10`);
+
+    expect(result.records).toHaveLength(3);
+
+    expect(result.records[0]).toMatchObject({
+      orchard: "なる1",
+      variety: "ゆら早生",
+      diametersMm: [40.1, 39.4, 37.9, 40.5, 43.9, 44.1],
+      brix: 8.2,
+      acidity: 3.17,
+    });
+    expect(
+      result.records[0].warnings.some((warning) => warning.includes("なる1")),
+    ).toBe(true);
+
+    expect(result.records[1]).toMatchObject({
+      orchard: "なる2",
+      treatment: "フィガロン区",
+      notes: "",
+      diametersMm: [43.6, 45.9, 41.6, 50.3, 48.2, 49.5, 45.5, 41.3, 42.6],
+      brix: 8.9,
+      acidity: 3.08,
+    });
+    expect(result.records[1].warnings).toContain(
+      "処理区マスタ未登録です。処理区名を確認してください",
+    );
+
+    expect(result.records[2]).toMatchObject({
+      orchard: "徳田",
+      diametersMm: [],
+      brix: 8.7,
+      acidity: 3.1,
+    });
+    expect(
+      result.records[2].warnings.some((warning) => warning.includes("徳田")),
+    ).toBe(true);
+    expect(result.records[2].warnings).toContain("横径が未入力です");
+  });
 
   it.each([
     ["田口早生", "田口"],
