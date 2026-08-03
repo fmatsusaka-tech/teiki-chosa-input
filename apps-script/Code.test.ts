@@ -12,13 +12,20 @@ type AppsScriptHelpers = {
   surveyDateParts_: (value: unknown) => { year: number; month: number; day: number } | null;
   validateCanonicalHeaders_: (headers: string[]) => string[];
   optionalNumber_: (value: unknown) => number | "";
+  ensureSurveyActiveStatusHeader_: (headers: string[]) => string[];
+  parseActiveStatus_: (value: unknown) => "有効" | "無効" | null;
+  isSurveyRowAdopted_: (headers: string[], row: unknown[], accepted: string[]) => boolean;
+  activeStatusByRegistrationId_: (headers: string[], rows: unknown[][]) => Map<string, unknown>;
+  summarizeSurveyActiveStatuses_: (headers: string[], rows: unknown[][]) => {
+    totalRows: number; active: number; inactive: number; blank: number; unknown: number;
+  };
 };
 
 function loadHelpers(): AppsScriptHelpers {
   const source = readFileSync(new URL("./Code.gs", import.meta.url), "utf8");
   const context: Record<string, unknown> = {};
   vm.runInNewContext(
-    `${source}\nthis.helpers = { ensureDiameterOutputHeaders_, buildSurveyDataRow_, surveyDateParts_, validateCanonicalHeaders_, optionalNumber_ };`,
+    `${source}\nthis.helpers = { ensureDiameterOutputHeaders_, buildSurveyDataRow_, surveyDateParts_, validateCanonicalHeaders_, optionalNumber_, ensureSurveyActiveStatusHeader_, parseActiveStatus_, isSurveyRowAdopted_, activeStatusByRegistrationId_, summarizeSurveyActiveStatuses_ };`,
     context,
   );
   return context.helpers as AppsScriptHelpers;
@@ -26,8 +33,59 @@ function loadHelpers(): AppsScriptHelpers {
 
 const {
   ensureDiameterOutputHeaders_, buildSurveyDataRow_, surveyDateParts_,
-  validateCanonicalHeaders_, optionalNumber_,
+  validateCanonicalHeaders_, optionalNumber_, ensureSurveyActiveStatusHeader_,
+  parseActiveStatus_, isSurveyRowAdopted_, activeStatusByRegistrationId_,
+  summarizeSurveyActiveStatuses_,
 } = loadHelpers();
+
+describe("調査データの有効状態", () => {
+  const headers = ["登録ID", "データ状態", "有効状態", "横径平均"];
+
+  it.each([
+    ["有効", "正常", ["正常"], true],
+    [" 有効 ", "横径なし", ["正常", "横径なし"], true],
+    ["無効", "正常", ["正常"], false],
+    ["", "正常", ["正常"], false],
+    ["要確認", "正常", ["正常"], false],
+    ["有効です", "正常", ["正常"], false],
+    [true, "正常", ["正常"], false],
+    [1, "正常", ["正常"], false],
+    ["有効", "要確認", ["正常"], false],
+  ])("有効状態=%s、データ状態=%sを厳密に判定する", (active, data, accepted, expected) => {
+    expect(isSurveyRowAdopted_(headers, ["id-1", data, active, ""], accepted)).toBe(expected);
+  });
+
+  it("許可値だけを前後空白除去後の完全一致で受け付ける", () => {
+    expect(parseActiveStatus_(" 有効 ")).toBe("有効");
+    expect(parseActiveStatus_("無効")).toBe("無効");
+    expect(parseActiveStatus_("有効候補")).toBeNull();
+    expect(parseActiveStatus_(false)).toBeNull();
+  });
+
+  it("有効状態を既存列の末尾へ追加し、列順変更後も見出し名で判定する", () => {
+    expect(ensureSurveyActiveStatusHeader_(["品種", "登録ID"])).toEqual(["品種", "登録ID", "有効状態"]);
+    const reordered = ["有効状態", "横径平均", "登録ID", "データ状態"];
+    expect(isSurveyRowAdopted_(reordered, ["有効", "", "id-1", "正常"], ["正常"])).toBe(true);
+  });
+
+  it("再生成用に登録IDごとの手動値を保持し、入力行や欠測値を変更しない", () => {
+    const rows = [["id-1", "正常", "無効", ""], ["id-2", "酸度なし", "", 0]];
+    const snapshot = structuredClone(rows);
+    const statusById = activeStatusByRegistrationId_(headers, rows);
+    expect(statusById.get("id-1")).toBe("無効");
+    expect(statusById.get("id-2")).toBe("");
+    expect(rows).toEqual(snapshot);
+    expect(rows[0][3]).toBe("");
+    expect(rows[1][3]).toBe(0);
+  });
+
+  it("匿名件数を有効・無効・空欄・未知値に分類する", () => {
+    expect(summarizeSurveyActiveStatuses_(headers, [
+      ["1", "正常", "有効", ""], ["2", "正常", "無効", ""],
+      ["3", "正常", "", ""], ["4", "正常", "保留", ""],
+    ])).toEqual({ totalRows: 4, active: 1, inactive: 1, blank: 1, unknown: 1 });
+  });
+});
 
 describe("調査データの横径変換", () => {
   it("備考の後に玉1〜玉10を置き、既存列の順序を維持する", () => {
