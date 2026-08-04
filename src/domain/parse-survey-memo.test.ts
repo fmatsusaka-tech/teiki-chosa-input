@@ -713,4 +713,35 @@ ${varietyAlias}
     expect(result.records).toHaveLength(1);
     expect(result.records[0].variety).toBe(expected);
   });
+
+  it("未登録の園地見出しの直後が品種名の行でも、新しい園地として認識する", () => {
+    const result = parseSurveyMemo(`12号
+YN26
+
+42.5
+
+48.2
+
+47.3
+
+40.1
+
+48.4
+
+52.2
+
+
+8.3
+2.04`);
+
+    expect(result.batchWarnings).toHaveLength(0);
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]).toMatchObject({
+      orchard: "12号",
+      variety: "YN26",
+      diametersMm: [42.5, 48.2, 47.3, 40.1, 48.4, 52.2],
+      brix: 8.3,
+      acidity: 2.04,
+    });
+  });
 });

@@ -455,11 +455,19 @@ export function parseSurveyMemo(
       continue;
     }
 
+    // A heading whose very next line is a recognized variety name (e.g. "12号" then
+    // "YN26") is still a plausible new-orchard start even though the variety line
+    // itself isn't numeric-like, so skip past it before measuring the numeric run.
+    const nextLine = lines[lineIndex + 1];
+    const lookaheadStart =
+      nextLine !== undefined && varietyHeadingMap.has(normalizeOrchard(nextLine))
+        ? lineIndex + 2
+        : lineIndex + 1;
     const followingNumericCount = lines
-      .slice(lineIndex + 1)
+      .slice(lookaheadStart)
       .findIndex((candidate) => !isNumericLikeLine(candidate));
     const numericRunLength =
-      followingNumericCount < 0 ? lines.length - lineIndex - 1 : followingNumericCount;
+      followingNumericCount < 0 ? lines.length - lookaheadStart : followingNumericCount;
     const looksLikeMoreData =
       numericRunLength > 0 && (numericLines.length === 0 || numericRunLength >= 3);
     if (looksLikeMoreData && currentOrchard && hasCollectedMeasurements()) {
