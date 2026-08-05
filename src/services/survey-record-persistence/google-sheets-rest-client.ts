@@ -42,7 +42,9 @@ export class GoogleSheetsRestClient implements GoogleSheetsClient {
     spreadsheetId: string,
     sheetName: string,
   ): Promise<readonly (readonly string[])[]> {
-    const range = encodeURIComponent(`'${sheetName.replaceAll("'", "''")}'!A:E`);
+    // No column bound: callers resolve fields by header name, so this must return every
+    // column the sheet actually has rather than assuming they all fit in a fixed range.
+    const range = encodeURIComponent(`'${sheetName.replaceAll("'", "''")}'`);
     const response = await this.request(
       `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${range}`,
     );
