@@ -86,6 +86,28 @@ function parseCellNumber(value: string | undefined): number | null {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
+const JST_SHEET_DATETIME_PATTERN =
+  /^(\d{4})\/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})$/;
+
+/**
+ * Parses a `計測日` cell into an absolute instant (epoch ms) rather than comparing display
+ * strings directly. Google Sheets returns date-typed cells using the spreadsheet's own
+ * number-format rendering (e.g. it may drop the zero-padding `formatSheetDateTime` writes,
+ * such as "2026/7/19 9:00:00" instead of "2026/07/19 09:00:00"), so an exact string match
+ * against a freshly-formatted value is not reliable. Falls back to native Date parsing for
+ * rows registered before spec version 1.1.0, which kept the previous ISO 8601 string.
+ */
+function parseMeasuredAtInstant(value: string): number | null {
+  const trimmed = value.trim();
+  const jstMatch = trimmed.match(JST_SHEET_DATETIME_PATTERN);
+  if (jstMatch) {
+    const [, year, month, day, hour, minute, second] = jstMatch.map(Number);
+    return Date.UTC(year, month - 1, day, hour, minute, second) - 9 * 60 * 60 * 1000;
+  }
+  const parsed = new Date(trimmed);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
+}
+
 /**
  * Identifies a record by its observed values only (orchard/variety/treatment/measuredAt/
  * diameters(順不同)/brix/acidity), per Issue #54's definition of a "complete duplicate".
@@ -95,7 +117,7 @@ function duplicateKey(fields: {
   orchard: string;
   variety: string;
   treatment: string;
-  measuredAtCell: string;
+  measuredAtInstant: number | null;
   diameters: readonly number[];
   brix: number | null;
   acidity: number | null;
@@ -104,7 +126,7 @@ function duplicateKey(fields: {
     fields.orchard.trim(),
     fields.variety.trim(),
     fields.treatment.trim(),
-    fields.measuredAtCell.trim(),
+    fields.measuredAtInstant,
     [...fields.diameters].sort((a, b) => a - b),
     fields.brix,
     fields.acidity,
@@ -116,10 +138,7 @@ function recordDuplicateKey(record: SurveyRecord): string {
     orchard: record.orchard,
     variety: record.variety,
     treatment: record.treatment ?? "",
-    // Matches the format existing rows are stored and read back in (see formatSheetDateTime).
-    // Rows registered before spec version 1.1.0 kept the previous ISO 8601 string and are not
-    // matched by this comparison; see docs/input-data-dictionary.md for the migration note.
-    measuredAtCell: formatSheetDateTime(record.measuredAt),
+    measuredAtInstant: parseMeasuredAtInstant(record.measuredAt),
     diameters: record.diametersMm,
     brix: record.brix,
     acidity: record.acidity,
@@ -147,7 +166,7 @@ function existingActiveDuplicateKeys(
       orchard: row[orchardIndex] ?? "",
       variety: row[varietyIndex] ?? "",
       treatment: row[treatmentIndex] ?? "",
-      measuredAtCell: row[measuredAtIndex] ?? "",
+      measuredAtInstant: parseMeasuredAtInstant(row[measuredAtIndex] ?? ""),
       diameters: diameterIndexes
         .map((index) => parseCellNumber(row[index]))
         .filter((value): value is number => value !== null),

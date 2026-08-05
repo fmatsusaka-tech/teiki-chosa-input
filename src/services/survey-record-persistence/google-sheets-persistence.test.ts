@@ -128,6 +128,30 @@ describe("duplicate detection (Issue #54)", () => {
     expect(client.appendRows).not.toHaveBeenCalled();
   });
 
+  it("blocks a duplicate even when Sheets returns 計測日 without zero-padding", async () => {
+    // Google Sheets renders date-typed cells using its own number format, which may not
+    // match the zero-padded string formatSheetDateTime writes (e.g. "9:00:00" vs "09:00:00").
+    const client = clientWithHeaders();
+    client.getRows.mockResolvedValue([[...SURVEY_RAW_HEADERS], existingRow({ 計測日: "2026/7/19 9:00:00" })]);
+    const persistence = new GoogleSheetsSurveyRecordPersistence(client);
+
+    const result = await persistence.save([record]);
+
+    expect(result.savedCount).toBe(0);
+    expect(result.skippedCount).toBe(1);
+  });
+
+  it("blocks a duplicate against a legacy pre-1.1.0 row whose 計測日 kept the ISO 8601 string", async () => {
+    const client = clientWithHeaders();
+    client.getRows.mockResolvedValue([[...SURVEY_RAW_HEADERS], existingRow({ 計測日: "2026-07-19T00:00:00.000Z" })]);
+    const persistence = new GoogleSheetsSurveyRecordPersistence(client);
+
+    const result = await persistence.save([record]);
+
+    expect(result.savedCount).toBe(0);
+    expect(result.skippedCount).toBe(1);
+  });
+
   it("does not treat a matching row as a duplicate when its データ状態 is not 有効", async () => {
     const client = clientWithHeaders();
     client.getRows.mockResolvedValue([[...SURVEY_RAW_HEADERS], existingRow({ データ状態: "取消" })]);
