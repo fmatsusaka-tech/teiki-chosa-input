@@ -39,6 +39,8 @@ describe("GoogleSheetsSurveyRecordPersistence", () => {
       savedCount: 1,
       recordIds: [record.id],
       editCredentials: [{ recordId: record.id, editKey: "one-time-edit-key" }],
+      skippedCount: 0,
+      skippedIds: [],
     });
     expect(client.getHeaderRow).toHaveBeenCalledWith(DEFAULT_SURVEY_SPREADSHEET_ID, DEFAULT_SURVEY_RAW_SHEET_NAME);
     expect(client.appendRows).toHaveBeenCalledWith(expect.objectContaining({
@@ -88,6 +90,106 @@ describe("GoogleSheetsSurveyRecordPersistence", () => {
     await expect(new GoogleSheetsSurveyRecordPersistence(client).save([record]))
       .rejects.toMatchObject({ code: "PROVIDER_ERROR" });
     expect(client.appendRows).not.toHaveBeenCalled();
+  });
+});
+
+describe("duplicate detection (Issue #54)", () => {
+  type RawHeaderName = (typeof SURVEY_RAW_HEADERS)[number];
+
+  function existingRow(overrides: Partial<Record<RawHeaderName, string>> = {}) {
+    const base: Record<RawHeaderName, string> = {
+      登録ID: "existing-id",
+      編集キーハッシュ: "existing-hash",
+      登録日時: "2026/07/18 09:00:00",
+      更新日時: "2026/07/18 09:00:00",
+      改訂番号: "1",
+      データ状態: "有効",
+      計測日: "2026/07/19 09:00:00",
+      園地名: "徳田",
+      品種: "早生",
+      処理区: "マルチ",
+      備考: "既存の備考（判定対象外）",
+      横径1: "56.2", 横径2: "55.1", 横径3: "", 横径4: "", 横径5: "",
+      横径6: "", 横径7: "", 横径8: "", 横径9: "", 横径10: "",
+      糖度: "", 酸度: "0",
+      入力方法: "text", 入力者: "", 送信元: "", 原文メモ: "",
+    };
+    return SURVEY_RAW_HEADERS.map((header) => overrides[header] ?? base[header]);
+  }
+
+  it("blocks a record that exactly matches an existing 有効 row, ignoring diameter order and 備考", async () => {
+    const client = clientWithHeaders();
+    client.getRows.mockResolvedValue([[...SURVEY_RAW_HEADERS], existingRow()]);
+    const persistence = new GoogleSheetsSurveyRecordPersistence(client);
+
+    const result = await persistence.save([record]);
+
+    expect(result).toMatchObject({ savedCount: 0, skippedCount: 1, skippedIds: [record.id] });
+    expect(client.appendRows).not.toHaveBeenCalled();
+  });
+
+  it("blocks a duplicate even when Sheets returns 計測日 without zero-padding", async () => {
+    // Google Sheets renders date-typed cells using its own number format, which may not
+    // match the zero-padded string formatSheetDateTime writes (e.g. "9:00:00" vs "09:00:00").
+    const client = clientWithHeaders();
+    client.getRows.mockResolvedValue([[...SURVEY_RAW_HEADERS], existingRow({ 計測日: "2026/7/19 9:00:00" })]);
+    const persistence = new GoogleSheetsSurveyRecordPersistence(client);
+
+    const result = await persistence.save([record]);
+
+    expect(result.savedCount).toBe(0);
+    expect(result.skippedCount).toBe(1);
+  });
+
+  it("blocks a duplicate against a legacy pre-1.1.0 row whose 計測日 kept the ISO 8601 string", async () => {
+    const client = clientWithHeaders();
+    client.getRows.mockResolvedValue([[...SURVEY_RAW_HEADERS], existingRow({ 計測日: "2026-07-19T00:00:00.000Z" })]);
+    const persistence = new GoogleSheetsSurveyRecordPersistence(client);
+
+    const result = await persistence.save([record]);
+
+    expect(result.savedCount).toBe(0);
+    expect(result.skippedCount).toBe(1);
+  });
+
+  it("does not treat a matching row as a duplicate when its データ状態 is not 有効", async () => {
+    const client = clientWithHeaders();
+    client.getRows.mockResolvedValue([[...SURVEY_RAW_HEADERS], existingRow({ データ状態: "取消" })]);
+    const persistence = new GoogleSheetsSurveyRecordPersistence(client);
+
+    const result = await persistence.save([record]);
+
+    expect(result.savedCount).toBe(1);
+    expect(result.skippedCount).toBe(0);
+    expect(client.appendRows).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects only the duplicate half of a mixed batch and saves the rest", async () => {
+    const client = clientWithHeaders();
+    client.getRows.mockResolvedValue([[...SURVEY_RAW_HEADERS], existingRow()]);
+    const persistence = new GoogleSheetsSurveyRecordPersistence(client);
+    const newRecord: SurveyRecord = { ...record, id: "new-id", orchard: "吉川" };
+
+    const result = await persistence.save([record, newRecord]);
+
+    expect(result.savedCount).toBe(1);
+    expect(result.skippedCount).toBe(1);
+    expect(result.skippedIds).toEqual([record.id]);
+    expect(result.recordIds).toEqual([newRecord.id]);
+  });
+
+  it("treats two identical records submitted in the same batch as a duplicate pair", async () => {
+    const client = clientWithHeaders();
+    client.getRows.mockResolvedValue([[...SURVEY_RAW_HEADERS]]);
+    const persistence = new GoogleSheetsSurveyRecordPersistence(client);
+    const duplicateOfRecord: SurveyRecord = { ...record, id: "second-id" };
+
+    const result = await persistence.save([record, duplicateOfRecord]);
+
+    expect(result.savedCount).toBe(1);
+    expect(result.skippedCount).toBe(1);
+    expect(result.recordIds).toEqual([record.id]);
+    expect(result.skippedIds).toEqual([duplicateOfRecord.id]);
   });
 });
 

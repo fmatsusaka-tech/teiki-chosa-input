@@ -78,6 +78,103 @@ function recordCells(
   };
 }
 
+const DIAMETER_HEADERS = Array.from({ length: 10 }, (_, index) => `横径${index + 1}` as RawHeader);
+
+function parseCellNumber(value: string | undefined): number | null {
+  if (value === undefined || value.trim() === "") return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+const JST_SHEET_DATETIME_PATTERN =
+  /^(\d{4})\/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})$/;
+
+/**
+ * Parses a `計測日` cell into an absolute instant (epoch ms) rather than comparing display
+ * strings directly. Google Sheets returns date-typed cells using the spreadsheet's own
+ * number-format rendering (e.g. it may drop the zero-padding `formatSheetDateTime` writes,
+ * such as "2026/7/19 9:00:00" instead of "2026/07/19 09:00:00"), so an exact string match
+ * against a freshly-formatted value is not reliable. Falls back to native Date parsing for
+ * rows registered before spec version 1.1.0, which kept the previous ISO 8601 string.
+ */
+function parseMeasuredAtInstant(value: string): number | null {
+  const trimmed = value.trim();
+  const jstMatch = trimmed.match(JST_SHEET_DATETIME_PATTERN);
+  if (jstMatch) {
+    const [, year, month, day, hour, minute, second] = jstMatch.map(Number);
+    return Date.UTC(year, month - 1, day, hour, minute, second) - 9 * 60 * 60 * 1000;
+  }
+  const parsed = new Date(trimmed);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
+}
+
+/**
+ * Identifies a record by its observed values only (orchard/variety/treatment/measuredAt/
+ * diameters(順不同)/brix/acidity), per Issue #54's definition of a "complete duplicate".
+ * 備考 is deliberately excluded, matching the confirmed spec.
+ */
+function duplicateKey(fields: {
+  orchard: string;
+  variety: string;
+  treatment: string;
+  measuredAtInstant: number | null;
+  diameters: readonly number[];
+  brix: number | null;
+  acidity: number | null;
+}): string {
+  return JSON.stringify([
+    fields.orchard.trim(),
+    fields.variety.trim(),
+    fields.treatment.trim(),
+    fields.measuredAtInstant,
+    [...fields.diameters].sort((a, b) => a - b),
+    fields.brix,
+    fields.acidity,
+  ]);
+}
+
+function recordDuplicateKey(record: SurveyRecord): string {
+  return duplicateKey({
+    orchard: record.orchard,
+    variety: record.variety,
+    treatment: record.treatment ?? "",
+    measuredAtInstant: parseMeasuredAtInstant(record.measuredAt),
+    diameters: record.diametersMm,
+    brix: record.brix,
+    acidity: record.acidity,
+  });
+}
+
+/** Builds duplicate-detection keys for every existing 有効 row in `調査原票`. */
+function existingActiveDuplicateKeys(
+  existingRows: readonly (readonly string[])[],
+  headers: readonly RawHeader[],
+): string[] {
+  const indexOf = (header: RawHeader) => headers.indexOf(header);
+  const statusIndex = indexOf("データ状態");
+  const orchardIndex = indexOf("園地名");
+  const varietyIndex = indexOf("品種");
+  const treatmentIndex = indexOf("処理区");
+  const measuredAtIndex = indexOf("計測日");
+  const brixIndex = indexOf("糖度");
+  const acidityIndex = indexOf("酸度");
+  const diameterIndexes = DIAMETER_HEADERS.map(indexOf);
+
+  return existingRows
+    .filter((row) => (row[statusIndex] ?? "").trim() === "有効")
+    .map((row) => duplicateKey({
+      orchard: row[orchardIndex] ?? "",
+      variety: row[varietyIndex] ?? "",
+      treatment: row[treatmentIndex] ?? "",
+      measuredAtInstant: parseMeasuredAtInstant(row[measuredAtIndex] ?? ""),
+      diameters: diameterIndexes
+        .map((index) => parseCellNumber(row[index]))
+        .filter((value): value is number => value !== null),
+      brix: parseCellNumber(row[brixIndex]),
+      acidity: parseCellNumber(row[acidityIndex]),
+    }));
+}
+
 function resolveColumns(headers: readonly string[]): RawHeader[] {
   const duplicates = headers.filter((header, index) => headers.indexOf(header) !== index);
   const missing = SURVEY_RAW_HEADERS.filter((header) => !headers.includes(header));
@@ -116,12 +213,30 @@ export class GoogleSheetsSurveyRecordPersistence implements SurveyRecordPersiste
 
   async save(records: readonly SurveyRecord[]): Promise<SaveSurveyRecordsResult> {
     const headers = resolveColumns(await this.client.getHeaderRow(this.spreadsheetId, this.sheetName));
+    const existingRows = await this.client.getRows(this.spreadsheetId, this.sheetName);
+    const seenKeys = new Set(existingActiveDuplicateKeys(existingRows, headers));
+
     const recordIds = records.map((record) => record.id ?? this.createId());
     const editKeys = records.map(() => this.createEditKey());
     const registeredAt = this.now().toISOString();
-    const rows = records.map((record, index) => {
+
+    const acceptedIndexes: number[] = [];
+    const skippedIds: string[] = [];
+    records.forEach((record, index) => {
+      const key = recordDuplicateKey(record);
+      // Records within the same batch are folded into the seen set as they're accepted,
+      // so submitting the same content twice in one registration is also caught.
+      if (seenKeys.has(key)) {
+        skippedIds.push(recordIds[index]);
+        return;
+      }
+      seenKeys.add(key);
+      acceptedIndexes.push(index);
+    });
+
+    const rows = acceptedIndexes.map((index) => {
       const cells = recordCells(
-        record,
+        records[index],
         recordIds[index],
         this.hashEditKey(editKeys[index]),
         registeredAt,
@@ -130,11 +245,18 @@ export class GoogleSheetsSurveyRecordPersistence implements SurveyRecordPersiste
       return headers.map((header) => cells[header] ?? "");
     });
 
-    await this.client.appendRows({ spreadsheetId: this.spreadsheetId, sheetName: this.sheetName, rows });
+    if (rows.length > 0) {
+      await this.client.appendRows({ spreadsheetId: this.spreadsheetId, sheetName: this.sheetName, rows });
+    }
+
     return {
       savedCount: rows.length,
-      recordIds,
-      editCredentials: recordIds.map((recordId, index) => ({ recordId, editKey: editKeys[index] })),
+      recordIds: acceptedIndexes.map((index) => recordIds[index]),
+      editCredentials: acceptedIndexes.map((index) => (
+        { recordId: recordIds[index], editKey: editKeys[index] }
+      )),
+      skippedCount: skippedIds.length,
+      skippedIds,
     };
   }
 }
