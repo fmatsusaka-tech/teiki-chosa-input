@@ -43,6 +43,7 @@
 | OCR画像はJPEG/PNG/WebP、10MB以下だけを許可する | `image-input-validation.test.ts`とPythonテスト |
 | OCR画像と結果を自宅PCへ永続保存しない | ゲートウェイ実装確認。一時ファイルが処理終了時に消えることを確認 |
 | 平文編集キーを正本やログへ保存しない | `edit-key.test.ts`、保存テスト、実シート確認 |
+| 試用版ログインは連続失敗が閾値に達すると一時的にロックアウトする（ブルートフォース対策） | `pilot-login-rate-limit.test.ts`、`src/app/api/pilot-login/route.test.ts` |
 
 ## 標準確認コマンド
 
