@@ -51,6 +51,12 @@ export async function POST(request: Request) {
     }
     const client = GoogleSheetsRestClient.fromEnvironment();
     const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
+    if (!spreadsheetId) {
+      throw new SurveyRecordPersistenceError(
+        "PROVIDER_UNAVAILABLE",
+        "Google Sheetsの保存先スプレッドシートIDが設定されていません。",
+      );
+    }
     const persistence = new GoogleSheetsSurveyRecordPersistence(client, {
       spreadsheetId,
       sheetName: "調査原票",
@@ -59,12 +65,10 @@ export async function POST(request: Request) {
       sourceText,
     });
     const saved = await saveSurveyRecords(persistence, records);
-    if (spreadsheetId) {
-      try {
-        await appendCorrectionLog(client, spreadsheetId, sourceText, records);
-      } catch {
-        // Learning data is best-effort and must never block the authoritative save.
-      }
+    try {
+      await appendCorrectionLog(client, spreadsheetId, sourceText, records);
+    } catch {
+      // Learning data is best-effort and must never block the authoritative save.
     }
     return NextResponse.json({
       ok: true,
