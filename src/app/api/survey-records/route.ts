@@ -51,6 +51,12 @@ export async function POST(request: Request) {
     }
     const client = GoogleSheetsRestClient.fromEnvironment();
     const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
+    if (!spreadsheetId) {
+      throw new SurveyRecordPersistenceError(
+        "PROVIDER_UNAVAILABLE",
+        "Google Sheetsの保存先スプレッドシートIDが設定されていません。",
+      );
+    }
     const persistence = new GoogleSheetsSurveyRecordPersistence(client, {
       spreadsheetId,
       sheetName: "調査原票",

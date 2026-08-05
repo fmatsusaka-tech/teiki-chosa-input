@@ -27,6 +27,7 @@
 | 入力マスタ取得失敗時も組み込み候補を返す | `sheet-survey-masters.test.ts`、API応答確認 |
 | 補正ログの失敗で正本保存を失敗扱いにしない | `correction-log.test.ts`とAPI実装確認 |
 | 保存失敗時に成功表示をしない | 保存サービス・APIテスト |
+| `GOOGLE_SHEETS_SPREADSHEET_ID`未設定時は保存を503で拒否し、既定の本番スプレッドシートIDへ暗黙フォールバックしない | `src/app/api/survey-records/route.test.ts` |
 
 ## セキュリティ保証
 
