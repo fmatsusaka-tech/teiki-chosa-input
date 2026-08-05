@@ -65,12 +65,10 @@ export async function POST(request: Request) {
       sourceText,
     });
     const saved = await saveSurveyRecords(persistence, records);
-    if (spreadsheetId) {
-      try {
-        await appendCorrectionLog(client, spreadsheetId, sourceText, records);
-      } catch {
-        // Learning data is best-effort and must never block the authoritative save.
-      }
+    try {
+      await appendCorrectionLog(client, spreadsheetId, sourceText, records);
+    } catch {
+      // Learning data is best-effort and must never block the authoritative save.
     }
     return NextResponse.json({
       ok: true,
