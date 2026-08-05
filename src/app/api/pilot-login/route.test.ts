@@ -49,4 +49,18 @@ describe("POST /api/pilot-login", () => {
     expect((await POST(loginRequest("wakayama"))).status).toBe(200);
     expect((await POST(loginRequest("wakayama"))).status).toBe(200);
   });
+
+  it("caps a burst of concurrent wrong-password requests at the failure threshold", async () => {
+    // Regression test: the rate-limit check must not straddle an `await` boundary, or
+    // requests fired in parallel could all read the pre-failure counter and bypass the cap.
+    const { POST } = await import("./route");
+
+    const responses = await Promise.all(
+      Array.from({ length: MAX_CONSECUTIVE_FAILURES + 3 }, () => POST(loginRequest("wrong-password"))),
+    );
+    const statuses = responses.map((response) => response.status);
+
+    expect(statuses.filter((status) => status === 401)).toHaveLength(MAX_CONSECUTIVE_FAILURES);
+    expect(statuses.filter((status) => status === 429)).toHaveLength(3);
+  });
 });

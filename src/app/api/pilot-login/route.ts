@@ -25,6 +25,14 @@ export async function POST(request: Request) {
     );
   }
 
+  // Read the body before touching the rate limiter: everything from the check below
+  // through recordPilotLoginFailure must run without an intervening `await`, or
+  // concurrent requests could all pass checkPilotLoginRateLimit before any of them
+  // records a failure, letting an attacker exceed MAX_CONSECUTIVE_FAILURES by firing
+  // guesses in parallel instead of one at a time.
+  const body = await request.json().catch(() => null) as { password?: unknown } | null;
+  const suppliedPassword = typeof body?.password === "string" ? body.password : "";
+
   const rateLimit = checkPilotLoginRateLimit(rateLimitState, Date.now());
   if (!rateLimit.allowed) {
     return NextResponse.json(
@@ -33,8 +41,6 @@ export async function POST(request: Request) {
     );
   }
 
-  const body = await request.json().catch(() => null) as { password?: unknown } | null;
-  const suppliedPassword = typeof body?.password === "string" ? body.password : "";
   if (!safeEqual(suppliedPassword, configuredPassword)) {
     recordPilotLoginFailure(rateLimitState, Date.now());
     return NextResponse.json(
