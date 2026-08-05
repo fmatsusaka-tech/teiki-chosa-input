@@ -5,6 +5,9 @@ export type SaveSurveyRecordsResult = {
   recordIds: string[];
   /** Returned once so a future UI can construct an edit URL. Never persist these plaintext keys. */
   editCredentials?: Array<{ recordId: string; editKey: string }>;
+  /** Records rejected as exact duplicates of an existing 有効 row (see Issue #54). */
+  skippedCount?: number;
+  skippedIds?: string[];
 };
 
 /**

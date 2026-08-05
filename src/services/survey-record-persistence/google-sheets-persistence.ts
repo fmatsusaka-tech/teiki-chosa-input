@@ -78,6 +78,84 @@ function recordCells(
   };
 }
 
+const DIAMETER_HEADERS = Array.from({ length: 10 }, (_, index) => `横径${index + 1}` as RawHeader);
+
+function parseCellNumber(value: string | undefined): number | null {
+  if (value === undefined || value.trim() === "") return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+/**
+ * Identifies a record by its observed values only (orchard/variety/treatment/measuredAt/
+ * diameters(順不同)/brix/acidity), per Issue #54's definition of a "complete duplicate".
+ * 備考 is deliberately excluded, matching the confirmed spec.
+ */
+function duplicateKey(fields: {
+  orchard: string;
+  variety: string;
+  treatment: string;
+  measuredAtCell: string;
+  diameters: readonly number[];
+  brix: number | null;
+  acidity: number | null;
+}): string {
+  return JSON.stringify([
+    fields.orchard.trim(),
+    fields.variety.trim(),
+    fields.treatment.trim(),
+    fields.measuredAtCell.trim(),
+    [...fields.diameters].sort((a, b) => a - b),
+    fields.brix,
+    fields.acidity,
+  ]);
+}
+
+function recordDuplicateKey(record: SurveyRecord): string {
+  return duplicateKey({
+    orchard: record.orchard,
+    variety: record.variety,
+    treatment: record.treatment ?? "",
+    // Matches the format existing rows are stored and read back in (see formatSheetDateTime).
+    // Rows registered before spec version 1.1.0 kept the previous ISO 8601 string and are not
+    // matched by this comparison; see docs/input-data-dictionary.md for the migration note.
+    measuredAtCell: formatSheetDateTime(record.measuredAt),
+    diameters: record.diametersMm,
+    brix: record.brix,
+    acidity: record.acidity,
+  });
+}
+
+/** Builds duplicate-detection keys for every existing 有効 row in `調査原票`. */
+function existingActiveDuplicateKeys(
+  existingRows: readonly (readonly string[])[],
+  headers: readonly RawHeader[],
+): string[] {
+  const indexOf = (header: RawHeader) => headers.indexOf(header);
+  const statusIndex = indexOf("データ状態");
+  const orchardIndex = indexOf("園地名");
+  const varietyIndex = indexOf("品種");
+  const treatmentIndex = indexOf("処理区");
+  const measuredAtIndex = indexOf("計測日");
+  const brixIndex = indexOf("糖度");
+  const acidityIndex = indexOf("酸度");
+  const diameterIndexes = DIAMETER_HEADERS.map(indexOf);
+
+  return existingRows
+    .filter((row) => (row[statusIndex] ?? "").trim() === "有効")
+    .map((row) => duplicateKey({
+      orchard: row[orchardIndex] ?? "",
+      variety: row[varietyIndex] ?? "",
+      treatment: row[treatmentIndex] ?? "",
+      measuredAtCell: row[measuredAtIndex] ?? "",
+      diameters: diameterIndexes
+        .map((index) => parseCellNumber(row[index]))
+        .filter((value): value is number => value !== null),
+      brix: parseCellNumber(row[brixIndex]),
+      acidity: parseCellNumber(row[acidityIndex]),
+    }));
+}
+
 function resolveColumns(headers: readonly string[]): RawHeader[] {
   const duplicates = headers.filter((header, index) => headers.indexOf(header) !== index);
   const missing = SURVEY_RAW_HEADERS.filter((header) => !headers.includes(header));
@@ -116,12 +194,30 @@ export class GoogleSheetsSurveyRecordPersistence implements SurveyRecordPersiste
 
   async save(records: readonly SurveyRecord[]): Promise<SaveSurveyRecordsResult> {
     const headers = resolveColumns(await this.client.getHeaderRow(this.spreadsheetId, this.sheetName));
+    const existingRows = await this.client.getRows(this.spreadsheetId, this.sheetName);
+    const seenKeys = new Set(existingActiveDuplicateKeys(existingRows, headers));
+
     const recordIds = records.map((record) => record.id ?? this.createId());
     const editKeys = records.map(() => this.createEditKey());
     const registeredAt = this.now().toISOString();
-    const rows = records.map((record, index) => {
+
+    const acceptedIndexes: number[] = [];
+    const skippedIds: string[] = [];
+    records.forEach((record, index) => {
+      const key = recordDuplicateKey(record);
+      // Records within the same batch are folded into the seen set as they're accepted,
+      // so submitting the same content twice in one registration is also caught.
+      if (seenKeys.has(key)) {
+        skippedIds.push(recordIds[index]);
+        return;
+      }
+      seenKeys.add(key);
+      acceptedIndexes.push(index);
+    });
+
+    const rows = acceptedIndexes.map((index) => {
       const cells = recordCells(
-        record,
+        records[index],
         recordIds[index],
         this.hashEditKey(editKeys[index]),
         registeredAt,
@@ -130,11 +226,18 @@ export class GoogleSheetsSurveyRecordPersistence implements SurveyRecordPersiste
       return headers.map((header) => cells[header] ?? "");
     });
 
-    await this.client.appendRows({ spreadsheetId: this.spreadsheetId, sheetName: this.sheetName, rows });
+    if (rows.length > 0) {
+      await this.client.appendRows({ spreadsheetId: this.spreadsheetId, sheetName: this.sheetName, rows });
+    }
+
     return {
       savedCount: rows.length,
-      recordIds,
-      editCredentials: recordIds.map((recordId, index) => ({ recordId, editKey: editKeys[index] })),
+      recordIds: acceptedIndexes.map((index) => recordIds[index]),
+      editCredentials: acceptedIndexes.map((index) => (
+        { recordId: recordIds[index], editKey: editKeys[index] }
+      )),
+      skippedCount: skippedIds.length,
+      skippedIds,
     };
   }
 }

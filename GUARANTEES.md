@@ -19,6 +19,7 @@
 | 入力マスタへの自動学習は、未登録の園地名・処理区名を「有効」チェック済みで追加するだけで、既存行(手動登録・自動追加問わず)の値を上書きしない | `Code.test.ts`(`syncInputMasterFromRawSheet`の補助関数群)、実シート確認 |
 | 園地への品種紐づけ(既定品種1〜3)は空欄スロットのみを埋め、4品種目以降は追加しない | `Code.test.ts`(`fillVarietySlots_`) |
 | `入力マスタ`の列が5列を超えたり並べ替えられたりしても、Next.js側が見出し名で正しく取得できる（列範囲を固定しない） | `google-sheets-rest-client.test.ts`、`sheet-survey-masters.test.ts` |
+| 園地・品種・処理区・計測日・横径(順不同)・糖度・酸度が完全に一致する「有効」行がある場合、登録をブロックする(備考は判定に含めない)。一括登録の一部だけが重複する場合は重複分だけ弾き、残りは登録する | `google-sheets-persistence.test.ts`(「duplicate detection (Issue #54)」) |
 
 ## 障害時の保証
 

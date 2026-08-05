@@ -350,6 +350,15 @@ export function SurveyInputWorkspace() {
       const result = await registerSurveyRecords(recordsWithIds, sourceText);
       const registeredCount = result.registeredCount ?? recordsWithIds.length;
       const skippedCount = result.skippedCount ?? 0;
+      if (registeredCount === 0 && skippedCount > 0) {
+        // Keep the input and record list intact so the user can review what matched,
+        // the same way a registration error leaves the screen untouched.
+        setRegistrationStatus({
+          kind: "error",
+          message: `選択した${skippedCount}件はすべて登録済みのデータと重複していたため、登録していません。`,
+        });
+        return;
+      }
       setRegistrationStatus({
         kind: "success",
         message: `${registeredCount}件を登録しました。${

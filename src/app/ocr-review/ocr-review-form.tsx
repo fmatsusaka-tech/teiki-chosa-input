@@ -43,11 +43,25 @@ export function OcrReviewForm({ initialCandidates, orchardNames, varietyNames }:
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ candidates, warningsConfirmed: true, sourceKind: sessionStorage.getItem("ocr-review-source-kind") || "photo" }),
       });
-      const payload = await response.json() as { savedCount?: number; error?: string };
+      const payload = await response.json() as { savedCount?: number; skippedCount?: number; error?: string };
       if (!response.ok) throw new Error(payload.error || "保存に失敗しました。");
+      const savedCount = payload.savedCount ?? candidates.length;
+      const skippedCount = payload.skippedCount ?? 0;
+      if (savedCount === 0 && skippedCount > 0) {
+        setStatus({
+          kind: "error",
+          message: `候補${skippedCount}件はすべて登録済みのデータと重複していたため、保存していません。`,
+        });
+        return;
+      }
       sessionStorage.removeItem("ocr-review-candidates");
       sessionStorage.removeItem("ocr-review-source-kind");
-      setStatus({ kind: "success", message: `${payload.savedCount ?? candidates.length}件を調査原票へ保存しました。` });
+      setStatus({
+        kind: "success",
+        message: `${savedCount}件を調査原票へ保存しました。${
+          skippedCount > 0 ? `重複していた${skippedCount}件は保存していません。` : ""
+        }`,
+      });
     } catch (error) {
       setStatus({ kind: "error", message: error instanceof Error ? error.message : "保存に失敗しました。" });
     }
