@@ -30,4 +30,12 @@ describe("buildSurveyRecordFromOcr", () => {
       registeredAt: "2026-07-19T01:00:00.000Z", source: "photo",
     })).toThrow();
   });
+
+  it("falls back to the registration time when OCR could not read a measured date", () => {
+    const record = buildSurveyRecordFromOcr({ ...candidate, measuredDate: null }, {
+      registeredAt: "2026-07-19T01:00:00.000Z", source: "photo",
+    });
+    expect(record.measuredAt).toBe("2026-07-19T01:00:00.000Z");
+    expect(record.warnings).toContain("計測日がなかったため登録日を仮設定しました");
+  });
 });
