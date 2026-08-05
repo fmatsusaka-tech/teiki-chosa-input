@@ -18,6 +18,7 @@
 | Output側はInputの正本へ書き戻さない | システム間契約とOutput側実装の確認 |
 | 入力マスタへの自動学習は、未登録の園地名・処理区名を「有効」チェック済みで追加するだけで、既存行(手動登録・自動追加問わず)の値を上書きしない | `Code.test.ts`(`syncInputMasterFromRawSheet`の補助関数群)、実シート確認 |
 | 園地への品種紐づけ(既定品種1〜3)は空欄スロットのみを埋め、4品種目以降は追加しない | `Code.test.ts`(`fillVarietySlots_`) |
+| `入力マスタ`の列が5列を超えたり並べ替えられたりしても、Next.js側が見出し名で正しく取得できる（列範囲を固定しない） | `google-sheets-rest-client.test.ts`、`sheet-survey-masters.test.ts` |
 
 ## 障害時の保証
 
